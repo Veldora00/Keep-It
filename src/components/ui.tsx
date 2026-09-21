@@ -86,7 +86,10 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
 
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && styles.chipPressed]}
+    >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -131,7 +134,12 @@ export function TypeToggle({
 
 export function PrimaryButton({ title, onPress, disabled }: { title: string; onPress: () => void; disabled?: boolean }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.btnPrimary, disabled && styles.btnPrimaryDisabled]}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={4}
+      style={({ pressed }) => [styles.btnPrimary, disabled && styles.btnPrimaryDisabled, pressed && !disabled && styles.btnPrimaryPressed]}
+    >
       <Text style={styles.btnPrimaryText}>{title}</Text>
     </Pressable>
   );
@@ -179,6 +187,7 @@ const styles = StyleSheet.create({
   heroMiniAmt: { fontFamily: fonts.serif, fontSize: 26, color: '#fff' },
   chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.paper, marginRight: 8 },
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipPressed: { opacity: 0.7 },
   chipText: { fontSize: 13.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
   chipTextActive: { color: '#fff' },
   darkChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
@@ -191,6 +200,7 @@ const styles = StyleSheet.create({
   typeBtnIncomeActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   typeBtnIncomeActiveText: { color: colors.accentDeep },
   btnPrimary: { backgroundColor: colors.accent, paddingVertical: 14, borderRadius: radii.sm, alignItems: 'center' },
+  btnPrimaryPressed: { backgroundColor: colors.accentDeep, transform: [{ scale: 0.985 }] },
   btnPrimaryDisabled: { opacity: 0.5 },
   btnPrimaryText: { color: '#fff', fontSize: 15, fontFamily: fonts.sansSemiBold, fontWeight: '600' },
   notice: { backgroundColor: '#FFF8E8', borderWidth: 1, borderColor: '#F0DFAE', borderRadius: 12, padding: 14, marginTop: 18 },

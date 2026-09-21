@@ -5,6 +5,7 @@ import { Card, Chip, EmptyState, HeroResult, PrimaryButton, SectionLabel, Sectio
 import { CheckRow, Field, FieldGrid } from '../components/fields';
 import AddTransactionSheet from '../components/AddTransactionSheet';
 import LoanSheet from '../components/LoanSheet';
+import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
 import { computeExtraImpact, formatTerm, money } from '../lib/calculations';
 import { HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, SUBSCRIPTIONS } from '../lib/types';
@@ -23,6 +24,7 @@ export default function HomeScreen() {
   const [txSheetOpen, setTxSheetOpen] = useState(false);
   const [loanSheetOpen, setLoanSheetOpen] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [trackedImpact, setTrackedImpact] = useState<TrackedImpact | null>(null);
 
   const [habitMode, setHabitModeState] = useState<HabitMode>('daily');
   const [selectedHabitKey, setSelectedHabitKey] = useState('coffee');
@@ -129,6 +131,11 @@ export default function HomeScreen() {
     if (now - then <= 0) return;
     if (tracked) return;
     store.trackHabit({ key: selectedHabitKey, mode: habitMode, label, now, then });
+    setTrackedImpact({
+      label,
+      monthlySaving,
+      impact: myLoan ? computeExtraImpact(myLoan.balance, myLoan.rate, myLoan.term, 0, monthlySaving, 'monthly') : null,
+    });
   }
 
   const trackBtnLabel = habitNone
@@ -328,12 +335,17 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      <Pressable style={styles.fab} onPress={() => setTxSheetOpen(true)}>
+      <Pressable
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        hitSlop={8}
+        onPress={() => setTxSheetOpen(true)}
+      >
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
       <AddTransactionSheet visible={txSheetOpen} onClose={() => setTxSheetOpen(false)} />
       <LoanSheet visible={loanSheetOpen} onClose={() => setLoanSheetOpen(false)} />
+      <TrackedImpactModal visible={!!trackedImpact} data={trackedImpact} onClose={() => setTrackedImpact(null)} />
     </View>
   );
 }
@@ -391,14 +403,17 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.ink,
+    borderWidth: 3,
+    borderColor: colors.paperWarm,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
+  fabPressed: { backgroundColor: colors.inkDim, transform: [{ scale: 0.94 }] },
   fabText: { color: '#fff', fontSize: 28, marginTop: -2 },
 });
