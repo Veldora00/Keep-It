@@ -1,0 +1,6 @@
+name: Deploy web preview
+
+jobs:
+  deploy:
+    type: deploy
+    name: Deploy
