@@ -149,6 +149,80 @@ export function calcHelp(income: number): number {
   return (income - threshold) * 0.15;
 }
 
+// ---------- Streaks & trophies ----------
+export function dateKeyFromDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+export function todayKey(): string {
+  return dateKeyFromDate(new Date());
+}
+
+// A "win" day is any day at least one of the given habit track-keys was logged done.
+// Counts the current run ending today (or yesterday, so missing today doesn't
+// zero the streak out from under someone mid-check-in) and the best run ever.
+export function computeStreak(
+  dailyLogs: Record<string, Record<string, boolean>>,
+  trackKeys: string[]
+): { current: number; best: number } {
+  if (trackKeys.length === 0) return { current: 0, best: 0 };
+  const isWin = (key: string) => {
+    const log = dailyLogs[key];
+    return !!log && trackKeys.some((tk) => log[tk]);
+  };
+
+  const cursor = new Date();
+  // If today isn't logged yet, don't break the streak — start counting from yesterday.
+  if (!isWin(dateKeyFromDate(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let current = 0;
+  while (isWin(dateKeyFromDate(cursor))) {
+    current++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  // Best-ever run: scan every logged date once.
+  const allDays = Object.keys(dailyLogs)
+    .filter((k) => isWin(k))
+    .sort();
+  let best = 0;
+  let run = 0;
+  let prev: Date | null = null;
+  for (const key of allDays) {
+    const [y, m, d] = key.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    if (prev) {
+      const diffDays = Math.round((dt.getTime() - prev.getTime()) / 86400000);
+      run = diffDays === 1 ? run + 1 : 1;
+    } else {
+      run = 1;
+    }
+    best = Math.max(best, run);
+    prev = dt;
+  }
+  best = Math.max(best, current);
+  return { current, best };
+}
+
+export interface Trophy {
+  days: number;
+  label: string;
+  icon: string;
+}
+export const TROPHY_MILESTONES: Trophy[] = [
+  { days: 3, label: '3-day streak', icon: '🔥' },
+  { days: 7, label: '1 week', icon: '⭐' },
+  { days: 14, label: '2 weeks', icon: '🥉' },
+  { days: 30, label: '1 month', icon: '🥈' },
+  { days: 60, label: '2 months', icon: '🥇' },
+  { days: 100, label: '100 days', icon: '🏆' },
+  { days: 365, label: '1 year', icon: '👑' },
+];
+export function earnedTrophies(bestStreak: number): Trophy[] {
+  return TROPHY_MILESTONES.filter((t) => bestStreak >= t.days);
+}
+export function nextTrophy(bestStreak: number): Trophy | null {
+  return TROPHY_MILESTONES.find((t) => bestStreak < t.days) ?? null;
+}
+
 // ---------- Borrowing capacity ----------
 export function maxLoanForPayment(payment: number, monthlyRate: number, termMonths: number): number {
   if (monthlyRate === 0) return payment * termMonths;

@@ -12,6 +12,7 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { StoreProvider } from './src/lib/store';
 import { AuthProvider, useAuth } from './src/lib/auth';
 import AuthScreen from './src/screens/AuthScreen';
+import DailyCheckIn from './src/components/DailyCheckIn';
 import { colors } from './src/theme/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import SavedScreen from './src/screens/SavedScreen';
@@ -96,6 +97,7 @@ function AppGate() {
           <Tab.Screen name="Tools" component={ToolsScreen} />
         </Tab.Navigator>
       </NavigationContainer>
+      <DailyCheckIn />
     </StoreProvider>
   );
 }

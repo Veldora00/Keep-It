@@ -24,6 +24,7 @@ interface Store {
   transactions: Transaction[];
   addTransaction: (tx: Transaction) => void;
   deleteTransaction: (id: number) => void;
+  adjustHabitTarget: (habitTrackKey: string, newAmount: number, newMonthlySaving: number) => void;
   customHabits: CustomHabits;
   addCustomHabit: (mode: HabitMode, habit: { key: string; label: string; now: number; then: number }) => void;
   dailyLogs: DailyLogs;
@@ -185,6 +186,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [transactions, cacheTx, userId]
   );
 
+  // Recalibrate a tracked habit's target: updates the recurring transaction that
+  // represents it in place, so future month-pace / interest-saved math uses the
+  // new number instead of insert-a-new-row-every-time.
+  const adjustHabitTarget = useCallback(
+    (habitTrackKey: string, newAmount: number, newMonthlySaving: number) => {
+      const next = transactions.map((t) =>
+        t.habitTrackKey === habitTrackKey ? { ...t, amount: newAmount, habitSaving: newMonthlySaving } : t
+      );
+      setTransactions(next);
+      cacheTx(next);
+      const row = next.find((t) => t.habitTrackKey === habitTrackKey);
+      if (userId && row) {
+        supabase
+          .from('keepit_transactions')
+          .update({ amount: newAmount, habit_saving: newMonthlySaving })
+          .eq('user_id', userId)
+          .eq('id', row.id)
+          .then(() => {});
+      }
+    },
+    [transactions, cacheTx, userId]
+  );
+
   const deleteTransaction = useCallback(
     (id: number) => {
       const next = transactions.filter((t) => t.id !== id);
@@ -300,6 +324,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       transactions,
       addTransaction,
       deleteTransaction,
+      adjustHabitTarget,
       customHabits,
       addCustomHabit,
       dailyLogs,
@@ -316,6 +341,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       transactions,
       addTransaction,
       deleteTransaction,
+      adjustHabitTarget,
       customHabits,
       addCustomHabit,
       dailyLogs,

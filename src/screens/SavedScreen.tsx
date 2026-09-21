@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, HeroResult, PageTitle } from '../components/ui';
 import { useStore } from '../lib/store';
-import { computeExtraImpact, money } from '../lib/calculations';
+import { computeExtraImpact, computeStreak, earnedTrophies, money, nextTrophy, TROPHY_MILESTONES } from '../lib/calculations';
 
 function dateKey(y: number, m: number, d: number) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -25,6 +25,12 @@ export default function SavedScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const dailyHabits = useMemo(() => transactions.filter((t) => t.habitTrackKey && t.habitTrackKey.endsWith(':daily')), [transactions]);
+  const streak = useMemo(
+    () => computeStreak(dailyLogs, dailyHabits.map((t) => t.habitTrackKey!)),
+    [dailyLogs, dailyHabits]
+  );
+  const trophies = earnedTrophies(streak.best);
+  const upNext = nextTrophy(streak.best);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -69,6 +75,34 @@ export default function SavedScreen() {
       <PageTitle>Saved</PageTitle>
 
       <HeroResult variant="g-green" label="Optimized this month" amount={money(dailyHabits.length ? monthTotal : 0)} sub={loanDetail} style={{ marginBottom: 18 }} />
+
+      {dailyHabits.length > 0 && (
+        <Card style={{ marginBottom: 18 }}>
+          <View style={styles.streakRow}>
+            <Text style={styles.streakFlame}>🔥</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.streakNum}>{streak.current}-day streak</Text>
+              <Text style={styles.streakSub}>
+                Best ever: {streak.best} day{streak.best === 1 ? '' : 's'}
+                {upNext ? ` · ${upNext.days - streak.best} to go for ${upNext.icon} ${upNext.label}` : ' · all trophies unlocked'}
+              </Text>
+            </View>
+          </View>
+          {trophies.length > 0 ? (
+            <View style={styles.trophyShelf}>
+              {TROPHY_MILESTONES.map((t) => {
+                const earned = streak.best >= t.days;
+                return (
+                  <View key={t.days} style={[styles.trophyBadge, !earned && styles.trophyBadgeLocked]}>
+                    <Text style={styles.trophyIcon}>{earned ? t.icon : '🔒'}</Text>
+                    <Text style={styles.trophyLabel}>{t.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </Card>
+      )}
 
       {dailyHabits.length === 0 ? (
         <EmptyState text="Track an everyday habit on Home first, then log the days you stuck to it here." />
@@ -181,4 +215,13 @@ const styles = StyleSheet.create({
   habitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: colors.line },
   habitRowName: { fontSize: 14.5, color: colors.ink },
   habitRowCheck: { fontSize: 13, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkFaint },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  streakFlame: { fontSize: 30 },
+  streakNum: { fontFamily: fonts.serif, fontSize: 18, color: colors.ink },
+  streakSub: { fontSize: 12.5, color: colors.inkDim, marginTop: 2 },
+  trophyShelf: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.line },
+  trophyBadge: { alignItems: 'center', width: '22%', paddingVertical: 8, borderRadius: radii.sm, backgroundColor: colors.mint },
+  trophyBadgeLocked: { backgroundColor: colors.paperWarm, opacity: 0.55 },
+  trophyIcon: { fontSize: 20, marginBottom: 3 },
+  trophyLabel: { fontSize: 9.5, color: colors.inkDim, fontFamily: fonts.sansSemiBold, fontWeight: '600', textAlign: 'center' },
 });
