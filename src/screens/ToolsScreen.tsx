@@ -3,6 +3,8 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { colors, fonts, radii } from '../theme/theme';
 import { Chip, PageTitle, SectionLabel } from '../components/ui';
 import { useAuth } from '../lib/auth';
+import { useStore } from '../lib/store';
+import { appNow } from '../lib/calculations';
 import GrowthCalc from './tools/GrowthCalc';
 import LoanPayoffCalc from './tools/LoanPayoffCalc';
 import BorrowCalc from './tools/BorrowCalc';
@@ -18,6 +20,7 @@ const TABS = [
 export default function ToolsScreen() {
   const [tab, setTab] = useState('loan');
   const { session, signOut } = useAuth();
+  const { canFastForward, dayOffset, setDayOffset } = useStore();
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.paperWarm }} contentContainerStyle={styles.screen}>
@@ -32,6 +35,22 @@ export default function ToolsScreen() {
       {tab === 'borrow' ? <BorrowCalc /> : null}
       {tab === 'tax' ? <TaxCalc /> : null}
       {tab === 'growth' ? <GrowthCalc /> : null}
+
+      {canFastForward ? (
+        <>
+          <SectionLabel>Testing — this account only</SectionLabel>
+          <Text style={styles.testHint}>
+            Simulated today: {appNow().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+            {dayOffset > 0 ? ` (+${dayOffset} day${dayOffset === 1 ? '' : 's'})` : ' (real time)'}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.picker}>
+            <Chip label="+1 day" onPress={() => setDayOffset(dayOffset + 1)} />
+            <Chip label="+7 days" onPress={() => setDayOffset(dayOffset + 7)} />
+            <Chip label="+30 days" onPress={() => setDayOffset(dayOffset + 30)} />
+            <Chip label="Reset to today" onPress={() => setDayOffset(0)} />
+          </ScrollView>
+        </>
+      ) : null}
 
       <SectionLabel>Account</SectionLabel>
       <Text style={styles.email}>{session?.user?.email}</Text>
@@ -53,6 +72,7 @@ export default function ToolsScreen() {
 const styles = StyleSheet.create({
   screen: { padding: 18, paddingTop: 20, paddingBottom: 110, maxWidth: 520, width: '100%', alignSelf: 'center' },
   picker: { marginBottom: 16 },
+  testHint: { fontSize: 13, color: colors.inkDim, fontFamily: fonts.sans, marginBottom: 10 },
   email: { fontSize: 13.5, color: colors.inkDim, fontFamily: fonts.sans, marginBottom: 12 },
   signOutBtn: { borderWidth: 1, borderColor: colors.lineStrong, borderRadius: radii.sm, paddingVertical: 13, alignItems: 'center', marginBottom: 20 },
   signOutText: { color: colors.red, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 14.5 },

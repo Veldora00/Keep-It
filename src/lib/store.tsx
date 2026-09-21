@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
 import { CustomHabit, CustomHabits, DailyLogs, HabitMode, MyLoan, Transaction } from './types';
-import { todayKey } from './calculations';
+import { FASTFORWARD_TEST_EMAIL, setDayOffset as setGlobalDayOffset, todayKey } from './calculations';
 
 // Legacy unscoped keys — this is where data lived before accounts existed.
 // Read once per device, on the very first login, then migrated to the cloud and cleared.
@@ -36,6 +36,16 @@ interface Store {
   habitTrackKey: (key: string, mode: HabitMode, label: string) => string;
   isHabitTracked: (key: string, mode: HabitMode, label: string) => boolean;
   trackHabit: (opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => void;
+  // Test-only: lets the one designated test account fast-forward what the
+  // app considers "today" — everyone else gets canFastForward: false and
+  // setDayOffset is a no-op for them.
+  canFastForward: boolean;
+  dayOffset: number;
+  setDayOffset: (days: number) => void;
+}
+
+function dayOffsetKey(userId: string) {
+  return `keepit_test_dayoffset:${userId}`;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -62,12 +72,46 @@ function txFromRow(row: any): Transaction {
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
+  const userEmail = session?.user?.email ?? null;
+  const canFastForward = userEmail === FASTFORWARD_TEST_EMAIL;
 
   const [ready, setReady] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [customHabits, setCustomHabits] = useState<CustomHabits>({ daily: [], subscription: [] });
   const [dailyLogs, setDailyLogs] = useState<DailyLogs>({});
   const [myLoan, setMyLoan] = useState<MyLoan | null>(null);
+  const [dayOffset, setDayOffsetState] = useState(0);
+
+  // Only the designated test account ever gets a non-zero offset, and it's
+  // reset the moment a different account signs in on this device.
+  useEffect(() => {
+    if (!userId || !canFastForward) {
+      setDayOffsetState(0);
+      setGlobalDayOffset(0);
+      return;
+    }
+    let cancelled = false;
+    AsyncStorage.getItem(dayOffsetKey(userId)).then((raw) => {
+      if (cancelled) return;
+      const n = raw ? parseInt(raw, 10) || 0 : 0;
+      setDayOffsetState(n);
+      setGlobalDayOffset(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, canFastForward]);
+
+  const setDayOffset = useCallback(
+    (days: number) => {
+      if (!userId || !canFastForward) return;
+      const clamped = Math.max(0, Math.round(days) || 0);
+      setDayOffsetState(clamped);
+      setGlobalDayOffset(clamped);
+      AsyncStorage.setItem(dayOffsetKey(userId), String(clamped)).catch(() => {});
+    },
+    [userId, canFastForward]
+  );
 
   // Load + (first time) migrate whenever the signed-in user changes.
   useEffect(() => {
@@ -352,6 +396,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       habitTrackKey,
       isHabitTracked,
       trackHabit,
+      canFastForward,
+      dayOffset,
+      setDayOffset,
     }),
     [
       ready,
@@ -369,6 +416,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       habitTrackKey,
       isHabitTracked,
       trackHabit,
+      canFastForward,
+      dayOffset,
+      setDayOffset,
     ]
   );
 

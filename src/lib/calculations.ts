@@ -159,12 +159,30 @@ export function calcHelp(income: number): number {
   return (income - threshold) * 0.15;
 }
 
+// ---------- Test-only clock override ----------
+// Lets exactly one test account "fast-forward" what the app considers today,
+// so multi-day streak / check-in logic can be tested in minutes instead of
+// waiting for real days to pass. Every other account always sees offset 0 —
+// this never changes real dates stored anywhere, only what `appNow()`/
+// `todayKey()` report while the app is running.
+export const FASTFORWARD_TEST_EMAIL = 'minlam696@gmail.com';
+let dayOffsetDays = 0;
+export function setDayOffset(days: number): void {
+  dayOffsetDays = Math.max(0, Math.round(days) || 0);
+}
+export function getDayOffset(): number {
+  return dayOffsetDays;
+}
+export function appNow(): Date {
+  return dayOffsetDays ? new Date(Date.now() + dayOffsetDays * 86400000) : new Date();
+}
+
 // ---------- Streaks & trophies ----------
 export function dateKeyFromDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 export function todayKey(): string {
-  return dateKeyFromDate(new Date());
+  return dateKeyFromDate(appNow());
 }
 
 // A "win" day is any day at least one of the given habit track-keys was logged done.
@@ -180,7 +198,7 @@ export function computeStreak(
     return !!log && trackKeys.some((tk) => log[tk]);
   };
 
-  const cursor = new Date();
+  const cursor = appNow();
   // If today isn't logged yet, don't break the streak — start counting from yesterday.
   if (!isWin(dateKeyFromDate(cursor))) cursor.setDate(cursor.getDate() - 1);
   let current = 0;

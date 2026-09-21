@@ -3,14 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, HeroResult, PageTitle } from '../components/ui';
 import { useStore } from '../lib/store';
-import { computeExtraImpact, computeStreak, earnedTrophies, money, nextTrophy, TROPHY_MILESTONES } from '../lib/calculations';
+import { appNow, computeExtraImpact, computeStreak, earnedTrophies, money, nextTrophy, todayKey, TROPHY_MILESTONES } from '../lib/calculations';
 
 function dateKey(y: number, m: number, d: number) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-}
-function todayKey() {
-  const t = new Date();
-  return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 function splitHabitIcon(fullName: string): { icon: string; name: string } {
   const m = fullName.match(/^(\p{Extended_Pictographic}️?)\s+(.*)$/u);
@@ -21,7 +17,7 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function SavedScreen() {
   const { transactions, dailyLogs, toggleDayHabit, myLoan } = useStore();
-  const [viewDate, setViewDate] = useState(new Date());
+  const [viewDate, setViewDate] = useState(appNow());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const dailyHabits = useMemo(() => transactions.filter((t) => t.habitTrackKey && t.habitTrackKey.endsWith(':daily')), [transactions]);
