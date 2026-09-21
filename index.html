@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#FBFAF7">
+<title>Keep It — Cash Flow</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231E9E82'/%3E%3Ctext x='32' y='44' font-family='Georgia,serif' font-size='34' fill='%23fff' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,380;9..144,440;9..144,560;9..144,640&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FFFFFF; --paper-warm:#FBFAF7; --mint:#E7F6EF;
+  --ink:#161A20; --ink-dim:#5B6472; --ink-faint:#8B93A1;
+  --line: rgba(22,26,32,0.10); --line-strong: rgba(22,26,32,0.18);
+  --accent:#1E9E82; --accent-deep:#157A65; --accent-soft:#E7F6EF;
+  --red:#D6553E; --red-soft:#FCEAE5;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:var(--paper-warm);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overscroll-behavior:none;}
+.screen{flex:1;overflow-y:auto;padding:20px 18px 100px;max-width:520px;margin:0 auto;width:100%;}
+.screen.hidden{display:none;}
+.calc-card.hidden{display:none;}
+
+h1.page-title{font-family:var(--serif);font-weight:460;font-size:26px;margin:8px 0 20px;}
+.page-title-row{display:flex;align-items:center;justify-content:space-between;margin:8px 0 20px;}
+.page-title-row h1.page-title{margin:0;}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line-strong);background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:19px;color:var(--ink);cursor:pointer;flex-shrink:0;}
+.icon-btn:active{background:var(--mint);}
+
+/* Dashboard */
+.balance-card{background:linear-gradient(160deg, var(--accent-soft), var(--mint));border-radius:20px;padding:28px 24px;margin-bottom:18px;}
+.balance-card .lbl{font-size:13px;color:var(--accent-deep);font-weight:600;margin-bottom:6px;}
+.balance-card .amt{font-family:var(--serif);font-size:40px;color:var(--ink);}
+.balance-card .sub{font-size:13px;color:var(--ink-dim);margin-top:6px;}
+
+.stat-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;}
+.stat-card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px;}
+.stat-card .s-lbl{font-size:12px;color:var(--ink-faint);margin-bottom:4px;}
+.stat-card .s-amt{font-family:var(--serif);font-size:22px;}
+.stat-card.income .s-amt{color:var(--accent-deep);}
+.stat-card.expense .s-amt{color:var(--red);}
+
+/* Bold gradient result cards */
+.hero-result{border-radius:18px;padding:20px 20px;margin-bottom:14px;position:relative;overflow:hidden;}
+.hero-result::after{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,0.08);}
+.hero-result::before{content:'';position:absolute;bottom:-60px;right:20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.06);}
+.hero-result.g-dark{background:linear-gradient(155deg,#232B33,#12161B);}
+.hero-result.g-green{background:linear-gradient(155deg,#2BAE8C,#0E6B54);}
+.hero-result.g-blue{background:linear-gradient(155deg,#4B7FE8,#2A4FC4);}
+.hero-result .h-lbl{font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:rgba(255,255,255,0.75);margin-bottom:6px;position:relative;}
+.hero-result .h-amt-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;position:relative;}
+.hero-result .h-amt{font-family:var(--serif);font-size:32px;color:#fff;line-height:1;position:relative;}
+.hero-result .h-multiplier{background:rgba(255,255,255,0.22);color:#fff;font-family:var(--sans);font-weight:700;font-size:13px;padding:3px 9px;border-radius:999px;}
+.hero-result .h-sub{font-size:12.5px;color:rgba(255,255,255,0.85);margin-top:6px;position:relative;line-height:1.45;}
+
+.hero-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.hero-mini{border-radius:18px;padding:22px 18px;position:relative;overflow:hidden;}
+.hero-mini::after{content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,0.08);}
+.hero-mini.g-green{background:linear-gradient(155deg,#2BAE8C,#0E6B54);}
+.hero-mini.g-blue{background:linear-gradient(155deg,#4B7FE8,#2A4FC4);}
+.hero-mini .m-lbl{font-size:11.5px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:rgba(255,255,255,0.75);margin-bottom:8px;position:relative;}
+.hero-mini .m-amt{font-family:var(--serif);font-size:26px;color:#fff;position:relative;}
+
+.section-label-row{display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;}
+.section-label{font-size:13px;font-weight:700;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.03em;margin:22px 0 10px;}
+.section-label-row .section-label{margin:0;}
+.link-btn{background:none;border:none;color:var(--accent-deep);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);padding:0;}
+
+.cat-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);}
+.cat-row:last-child{border-bottom:none;}
+.cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.cat-name{flex:1;font-size:14.5px;}
+.cat-amt{font-size:14.5px;font-weight:600;}
+.cat-bar-track{height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px;}
+.cat-bar-fill{height:100%;border-radius:4px;}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--ink-faint);}
+.empty-state p{font-size:14px;margin-top:8px;}
+.empty-state.small{padding:24px 16px;}
+
+/* Add-transaction sheet */
+.sheet-overlay{position:fixed;inset:0;background:rgba(22,26,32,0.45);z-index:20;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .18s ease;}
+.sheet-overlay.open{opacity:1;pointer-events:auto;}
+.sheet{background:var(--paper);width:100%;max-width:520px;margin:0 auto;border-radius:22px 22px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform .22s cubic-bezier(.2,.9,.3,1);}
+.sheet-overlay.open .sheet{transform:translateY(0);}
+.sheet-handle{width:36px;height:4px;background:var(--line-strong);border-radius:3px;margin:0 auto 14px;}
+.sheet-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.sheet-title-row h2{font-family:var(--serif);font-weight:500;font-size:20px;margin:0;}
+
+.tx-form .field{margin-bottom:14px;}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-dim);margin-bottom:6px;}
+.field input, .field select{width:100%;padding:12px 13px;border:1px solid var(--line-strong);border-radius:10px;font-size:15px;font-family:var(--sans);color:var(--ink);background:var(--paper-warm);}
+.type-toggle{display:flex;gap:8px;margin-bottom:14px;}
+.type-btn{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line-strong);background:var(--paper-warm);font-size:14px;font-weight:600;color:var(--ink-dim);cursor:pointer;}
+.type-btn.active.income{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
+.type-btn.active.expense{background:var(--red-soft);border-color:var(--red);color:var(--red);}
+.recurring-check{display:flex;align-items:center;gap:8px;margin-bottom:16px;}
+.recurring-check input{width:17px;height:17px;accent-color:var(--accent);}
+.recurring-check label{font-size:14px;color:var(--ink-dim);}
+.btn-primary{width:100%;background:var(--accent);color:#fff;border:none;padding:13px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;}
+.btn-primary:active{background:var(--accent-deep);}
+
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+.tx-item:last-child{border-bottom:none;}
+.tx-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.tx-icon.income{background:var(--accent-soft);}
+.tx-icon.expense{background:var(--red-soft);}
+.tx-info{flex:1;min-width:0;}
+.tx-name{font-size:14.5px;font-weight:500;}
+.tx-meta{font-size:12px;color:var(--ink-faint);margin-top:2px;}
+.tx-amt{font-size:14.5px;font-weight:600;white-space:nowrap;}
+.tx-amt.income{color:var(--accent-deep);}
+.tx-amt.expense{color:var(--red);}
+.tx-delete{background:none;border:none;color:var(--ink-faint);font-size:18px;cursor:pointer;padding:4px 8px;}
+
+/* FAB */
+.fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:26px;box-shadow:0 8px 20px rgba(30,158,130,0.35);cursor:pointer;z-index:11;display:flex;align-items:center;justify-content:center;}
+.fab:active{background:var(--accent-deep);}
+
+/* Forecast */
+.forecast-controls{display:flex;gap:8px;margin-bottom:18px;}
+.range-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line-strong);background:var(--paper);font-size:13.5px;font-weight:600;color:var(--ink-dim);cursor:pointer;}
+.range-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+.chart-card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:18px;}
+.chart-svg{width:100%;height:180px;}
+#loan-chart{height:210px;}
+.forecast-note{font-size:13px;color:var(--ink-faint);line-height:1.6;margin-top:6px;}
+.forecast-list .tx-item{border-bottom:1px dashed var(--line);}
+
+/* Saved (daily log) calendar */
+.log-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+#log-cal-weekdays{margin-bottom:6px;font-size:11px;font-weight:700;color:var(--ink-faint);text-align:center;text-transform:uppercase;}
+.log-cal-cell{aspect-ratio:1;border-radius:10px;border:1px solid var(--line);background:var(--paper-warm);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-family:var(--sans);}
+.log-cal-cell:disabled{opacity:0.35;cursor:default;}
+.log-cal-cell.empty{visibility:hidden;border:none;}
+.log-cal-cell.today{border-color:var(--ink);border-width:1.5px;}
+.log-cal-cell.selected{border-color:var(--accent-deep);border-width:2px;}
+.log-cal-cell.logged{background:var(--accent-soft);}
+.log-cal-daynum{font-size:13px;font-weight:600;color:var(--ink-dim);}
+.log-cal-cell.logged .log-cal-daynum{color:var(--accent-deep);}
+.log-cal-dot{width:5px;height:5px;border-radius:50%;background:var(--accent-deep);}
+.log-habit-row{display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 2px;
+  border:none;border-bottom:1px solid var(--line);background:none;font-family:var(--sans);font-size:14.5px;
+  color:var(--ink);cursor:pointer;text-align:left;}
+.log-habit-row:last-child{border-bottom:none;}
+.log-habit-check{font-size:13px;font-weight:600;color:var(--ink-faint);white-space:nowrap;}
+.log-habit-row.active .log-habit-check{color:var(--accent-deep);}
+
+/* Calculator (Tools) */
+.calc-card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px;}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.calc-result{margin-top:22px;padding-top:20px;border-top:1px solid var(--line);}
+.calc-result .r-lbl{font-size:13px;color:var(--ink-dim);}
+.calc-result .r-amt{font-family:var(--serif);font-size:38px;color:var(--accent-deep);margin:4px 0;}
+.calc-result .r-detail{font-size:13px;color:var(--ink-faint);line-height:1.6;}
+.notice{background:#FFF8E8;border:1px solid #F0DFAE;border-radius:12px;padding:14px 16px;font-size:12.5px;color:#7A5A00;line-height:1.6;margin-top:18px;}
+
+/* Payoff comparison bars — easier to read at a glance than a decade-long line chart */
+.payoff-compare-card{padding:20px;}
+.payoff-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.payoff-row:last-of-type{margin-bottom:16px;}
+.payoff-lbl{flex:0 0 108px;font-size:12.5px;color:var(--ink-dim);font-weight:600;}
+.payoff-track{flex:1;height:14px;background:var(--line);border-radius:8px;overflow:hidden;}
+.payoff-fill{height:100%;border-radius:8px;width:0%;transition:width .5s cubic-bezier(.2,.8,.3,1);}
+.payoff-fill.grey{background:#B3B9C2;}
+.payoff-fill.green{background:linear-gradient(90deg,#2BAE8C,#1E9E82);}
+.payoff-time{flex:0 0 64px;text-align:right;font-size:13.5px;font-weight:700;color:var(--ink);}
+.payoff-banner{margin-top:2px;background:var(--accent-soft);color:var(--accent-deep);font-size:13px;font-weight:600;border-radius:10px;padding:11px 14px;text-align:center;transition:opacity .2s ease;}
+.payoff-banner.neutral{background:var(--paper-warm);color:var(--ink-faint);font-weight:500;}
+
+/* Micro-animations for feedback — a small "win" feeling when numbers move */
+@keyframes bump{0%{transform:scale(1);}35%{transform:scale(1.045);}100%{transform:scale(1);}}
+.bump{animation:bump .32s ease;}
+.hero-result, .hero-mini, .stat-card, .balance-card{transition:transform .18s ease;}
+
+.tool-picker{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+.tool-picker::-webkit-scrollbar{display:none;}
+.tool-picker .range-btn{flex:0 0 auto;padding:10px 14px;}
+.calc-tabs{display:flex;gap:8px;margin-bottom:18px;}
+
+/* Bottom nav */
+nav.tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--paper);border-top:1px solid var(--line);display:flex;padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:10;}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;background:none;border:none;color:var(--ink-faint);font-family:var(--sans);font-size:11px;font-weight:600;cursor:pointer;}
+.tab-btn.active{color:var(--accent-deep);}
+.tab-icon{font-size:20px;line-height:1;}
+</style>
+</head>
+<body>
+
+<!-- HOME (dashboard + recent transactions; adding happens via the + button) -->
+<div class="screen" id="screen-home">
+  <h1 class="page-title">Home</h1>
+
+  <!-- The payoff, above the tool that produces it — once at least one habit
+       is tracked, this is the very first thing Home shows: not "here's a
+       calculator", but "here's what you're already doing about it". -->
+  <div id="tracked-habits-section" style="display:none;margin-top:0;">
+    <div class="section-label" style="margin-top:0;">You're saving</div>
+    <!-- Just the one number — no per-item breakdown underneath. -->
+    <div class="hero-result g-green">
+      <div class="h-lbl">Every month</div>
+      <div class="h-amt" id="tracked-habits-amt">$0/mo</div>
+      <div class="h-sub" id="tracked-habits-hero-detail"></div>
+    </div>
+  </div>
+
+  <!-- Everyday habit is the hook — the first thing Home shows until at
+       least one habit is tracked, and still right below the payoff after
+       that. "Track this" turns a what-if into real data: it drops a
+       recurring transaction straight into this month's spending, so the
+       habit isn't just a calculator you forget — it's now part of the
+       numbers below. -->
+  <div class="section-label" id="everyday-habit-label">Everyday habit</div>
+  <div class="chart-card habit-card">
+    <div class="type-toggle" style="margin-bottom:12px;">
+      <button class="type-btn expense active" id="habitmode-daily" onclick="setHabitMode('daily')">Everyday habit</button>
+      <button class="type-btn income" id="habitmode-subscription" onclick="setHabitMode('subscription')">Subscriptions</button>
+    </div>
+
+    <!-- Populated by renderHabitPicker(): presets, then any habits you've
+         named yourself, then "Other" — always last — to add another. -->
+    <div class="tool-picker" id="habit-picker-daily"></div>
+    <!-- Real current Australian plan prices, so "downgrade" suggests an
+         actual cheaper tier that exists, not a guess. -->
+    <div class="tool-picker" id="habit-picker-subscription" style="display:none;"></div>
+
+    <div class="field" id="habit-custom-name-field" style="display:none;margin-bottom:12px;">
+      <label for="habit-custom-name">What is it called?</label>
+      <input type="text" id="habit-custom-name" placeholder="e.g. Uber Eats, Gym membership — press Enter to add"
+        oninput="recalcHabit()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmCustomHabit();}">
+    </div>
+
+    <!-- The laziest possible "not for me" path: one tap, not three
+         (open field, clear it, type 0). Ticking this zeroes both fields,
+         locks them, and pulls this habit out of every calculation —
+         nothing to save on something you don't spend on. -->
+    <!-- The payoff first, the inputs to adjust it below — same order as
+         every other calculator in this app: the answer up top, the dials
+         underneath, not the other way round. -->
+    <div class="hero-result g-green" style="margin-bottom:12px;">
+      <div class="h-lbl" id="habit-save-lbl">You'd save</div>
+      <div class="h-amt" id="habit-save-amt">$0/mo</div>
+      <div class="h-sub" id="habit-save-detail"></div>
+    </div>
+
+    <div class="recurring-check" id="habit-none-toggle-field">
+      <input type="checkbox" id="habit-none-toggle" onchange="toggleHabitNone()">
+      <label for="habit-none-toggle" id="habit-none-toggle-label">I don't do this</label>
+    </div>
+
+    <div class="field-grid" id="habit-field-grid">
+      <div class="field">
+        <label for="habit-now" id="habit-now-label">You spend now (per day)</label>
+        <input type="number" id="habit-now" value="6" min="0" step="0.5" oninput="recalcHabit()">
+      </div>
+      <div class="field">
+        <label for="habit-then" id="habit-then-label">Try spending (per day)</label>
+        <input type="number" id="habit-then" value="4" min="0" step="0.5" oninput="recalcHabit()">
+      </div>
+    </div>
+    <button class="btn-primary" id="habit-track-btn" onclick="trackHabit()">Track this — add to my monthly spending</button>
+  </div>
+
+  <!-- Optional, one-off at heart: a rough loan estimate, entered whenever the
+       person feels like it (not forced at signup), that powers the habit
+       card above and the loan tools in Tools without asking twice. -->
+  <div id="myloan-prompt" class="chart-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <div>
+      <div style="font-size:14px;font-weight:600;">Add your loan</div>
+      <div style="font-size:12.5px;color:var(--ink-faint);margin-top:2px;">Optional — see habits in real interest saved, not just dollars</div>
+    </div>
+    <button class="icon-btn" style="width:auto;border-radius:10px;padding:0 14px;font-size:13px;font-weight:600;color:var(--accent-deep);" onclick="openLoanSheet()">Add</button>
+  </div>
+  <div id="myloan-summary" class="chart-card" style="display:none;align-items:center;justify-content:space-between;gap:12px;">
+    <div>
+      <div style="font-size:14px;font-weight:600;" id="myloan-summary-text">Your loan</div>
+      <div style="font-size:12.5px;color:var(--ink-faint);margin-top:2px;">Used to work out the interest saved above</div>
+    </div>
+    <button class="icon-btn" style="width:auto;border-radius:10px;padding:0 14px;font-size:13px;font-weight:600;" onclick="openLoanSheet()">Edit</button>
+  </div>
+
+  <!-- Tracked habits — the running total of everything "Track this" has
+       committed to, so the hook has a visible payoff over time instead of
+       disappearing the moment you leave the card. -->
+
+  <!-- Balance and recent transactions still matter, but they're the record
+       of what already happened — the habit above is what changes what
+       happens next, so it leads. -->
+  <div class="section-label">Your balance</div>
+  <div class="balance-card">
+    <div class="lbl">Current balance</div>
+    <div class="amt" id="db-balance">$0</div>
+    <div class="sub" id="db-balance-sub">Add your first transaction to get started</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-card income"><div class="s-lbl">Income this month</div><div class="s-amt" id="db-income">$0</div></div>
+    <div class="stat-card expense"><div class="s-lbl">Spent this month</div><div class="s-amt" id="db-expense">$0</div></div>
+  </div>
+
+  <div class="section-label-row">
+    <div class="section-label" style="margin:0;">Recent</div>
+    <button class="link-btn" id="db-recent-toggle" onclick="toggleRecentView()">Show all</button>
+  </div>
+  <div id="db-recent"><div class="empty-state small"><p>Nothing added yet — tap + to log your first transaction</p></div></div>
+
+  <div class="section-label">Spending by category</div>
+  <div id="db-categories"><div class="empty-state small"><p>No expenses logged yet</p></div></div>
+</div>
+
+<!-- SAVED (daily cash-flow log) — this isn't a spending diary; it's a
+     day-by-day record of the everyday habits you actually stuck to, so
+     "cash flow optimized" stops being a theoretical monthly number and
+     becomes something you can point to on a specific day. Subscriptions
+     aren't here — you don't "skip Netflix" day to day, so this is
+     everyday-habit only, same scope as the Home tool. -->
+<div class="screen hidden" id="screen-log">
+  <h1 class="page-title">Saved</h1>
+
+  <div class="hero-result g-green" style="margin-bottom:18px;">
+    <div class="h-lbl">Optimized this month</div>
+    <div class="h-amt" id="log-month-total">$0</div>
+    <div class="h-sub" id="log-month-detail"></div>
+  </div>
+
+  <div id="log-empty-state" class="empty-state" style="display:none;">
+    <p>Track an everyday habit on Home first, then log the days you stuck to it here.</p>
+  </div>
+
+  <div id="log-calendar-card">
+    <div class="section-label-row" style="margin-top:0;">
+      <button class="link-btn" onclick="shiftLogMonth(-1)" aria-label="Previous month">‹ Prev</button>
+      <div class="section-label" style="margin:0;" id="log-month-label">Month</div>
+      <button class="link-btn" onclick="shiftLogMonth(1)" aria-label="Next month">Next ›</button>
+    </div>
+    <div class="chart-card">
+      <div class="log-cal-grid" id="log-cal-weekdays">
+        <div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div>
+      </div>
+      <div class="log-cal-grid" id="log-cal-days"></div>
+    </div>
+  </div>
+
+  <div class="chart-card" id="log-day-panel" style="display:none;">
+    <div class="section-label" style="margin-top:0;" id="log-day-title">Today</div>
+    <div id="log-day-habits"></div>
+  </div>
+</div>
+
+<!-- FORECAST -->
+<div class="screen hidden" id="screen-forecast">
+  <h1 class="page-title">Forecast</h1>
+  <div class="forecast-controls">
+    <button class="range-btn active" data-months="3" onclick="setForecastRange(3)">3 months</button>
+    <button class="range-btn" data-months="6" onclick="setForecastRange(6)">6 months</button>
+    <button class="range-btn" data-months="12" onclick="setForecastRange(12)">12 months</button>
+  </div>
+  <div class="chart-card">
+    <svg class="chart-svg" id="forecast-chart" viewBox="0 0 400 180" preserveAspectRatio="none"></svg>
+    <div class="forecast-note" id="forecast-note">Based on your recurring income and expenses, projected forward. Actual results will vary.</div>
+  </div>
+  <div class="section-label">Recurring items counted</div>
+  <div id="forecast-list" class="forecast-list"><div class="empty-state"><p>Mark a transaction as recurring to see it here</p></div></div>
+</div>
+
+<!-- TOOLS (calculators) -->
+<div class="screen hidden" id="screen-calculator">
+  <h1 class="page-title">Tools</h1>
+
+  <div class="tool-picker">
+    <button class="range-btn active" id="calctab-loan" onclick="setCalcTab('loan')">Loan payoff</button>
+    <button class="range-btn" id="calctab-borrow" onclick="setCalcTab('borrow')">Borrowing capacity</button>
+    <button class="range-btn" id="calctab-tax" onclick="setCalcTab('tax')">Take-home pay</button>
+    <button class="range-btn" id="calctab-growth" onclick="setCalcTab('growth')">Savings growth</button>
+  </div>
+
+  <!-- Growth mode -->
+  <div class="calc-card hidden" id="calc-growth-card">
+    <div class="field-grid">
+      <div class="field">
+        <label for="calc-amount">Amount</label>
+        <input type="number" id="calc-amount" value="2500" min="0" step="50">
+      </div>
+      <div class="field">
+        <label for="calc-rate">Annual rate (%)</label>
+        <input type="number" id="calc-rate" value="6" min="0" step="0.1">
+      </div>
+      <div class="field">
+        <label for="calc-years">Years</label>
+        <input type="number" id="calc-years" value="3" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="calc-mode">Mode</label>
+        <select id="calc-mode">
+          <option value="growth">Growth</option>
+          <option value="offset">Offset (interest avoided)</option>
+        </select>
+      </div>
+    </div>
+    <div class="calc-result">
+      <div class="r-lbl" id="calc-r-label">This amount could grow to</div>
+      <div class="r-amt" id="calc-r-amt">$2,979</div>
+      <div class="r-detail" id="calc-r-detail"></div>
+    </div>
+    <div class="notice">General information only, based on the numbers you enter — not financial advice and doesn't account for your personal circumstances.</div>
+  </div>
+
+  <!-- Loan payoff mode — just the inputs that change the answer: what's left,
+       the rate, the term, and the extra you'd put toward it. No repayment
+       figure here — that's what Borrowing capacity is for. -->
+  <div class="calc-card" id="calc-loan-card">
+    <div class="section-label" style="margin-top:0;">Loan type</div>
+    <div class="calc-tabs">
+      <button class="range-btn active" id="loantype-mortgage" onclick="setLoanType('mortgage')">Mortgage</button>
+      <button class="range-btn" id="loantype-car" onclick="setLoanType('car')">Car loan</button>
+      <button class="range-btn" id="loantype-personal" onclick="setLoanType('personal')">Personal loan</button>
+    </div>
+
+    <!-- The number you actually came here to change sits first — everything
+         below it is just context the calculation needs. -->
+    <div class="field">
+      <label for="loan-extra" id="loan-extra-label">Extra repayment / offset amount</label>
+      <input type="number" id="loan-extra" value="2000" min="0" step="100">
+    </div>
+    <div class="type-toggle" style="margin-bottom:0;">
+      <button class="type-btn expense active" id="extramode-once" onclick="setExtraMode('once')">One-off, today</button>
+      <button class="type-btn income" id="extramode-monthly" onclick="setExtraMode('monthly')">Every month</button>
+    </div>
+    <!-- Everyday-habit shortcuts live on Home now, since that's the screen
+         people actually open day to day — this tool stays a "test any
+         number" calculator, not a duplicate of that card. -->
+
+    <div class="field-grid">
+      <div class="field">
+        <label for="loan-balance">Remaining loan amount</label>
+        <input type="number" id="loan-balance" value="35000" min="0" step="500">
+      </div>
+      <div class="field">
+        <label for="loan-rate">Interest rate (%)</label>
+        <input type="number" id="loan-rate" value="8" min="0" step="0.1">
+      </div>
+      <div class="field">
+        <label for="loan-term">Term remaining (years)</label>
+        <input type="number" id="loan-term" value="5" min="0.5" step="0.5">
+      </div>
+    </div>
+
+    <!-- Balloon payment: a toggle, not a field that's just always there —
+         most car/personal loans don't have one, so asking "does yours?"
+         beats a $0 input people have to notice and ignore. Hidden entirely
+         for mortgages, which essentially never carry a balloon. -->
+    <div id="loan-balloon-toggle-field" class="recurring-check" style="display:none;">
+      <input type="checkbox" id="loan-balloon-toggle" onchange="toggleBalloonField()">
+      <label for="loan-balloon-toggle">This loan has a balloon payment</label>
+    </div>
+    <div class="field" id="loan-balloon-field" style="display:none;">
+      <label for="loan-balloon">Balloon payment</label>
+      <input type="number" id="loan-balloon" value="0" min="0" step="500">
+    </div>
+
+    <div class="hero-result g-green">
+      <div class="h-lbl">Interest saved</div>
+      <div class="h-amt-row">
+        <div class="h-amt" id="loan-r-amt">$0</div>
+        <div class="h-multiplier" id="loan-r-multiplier">0×</div>
+      </div>
+      <div class="h-sub" id="loan-r-detail"></div>
+    </div>
+    <div class="hero-row">
+      <div class="hero-mini g-blue">
+        <div class="m-lbl">Time saved</div>
+        <div class="m-amt" id="loan-months-saved">0 mths</div>
+      </div>
+      <div class="hero-mini g-dark">
+        <div class="m-lbl" id="loan-newbalance-lbl">New balance</div>
+        <div class="m-amt" id="loan-newbalance">$0</div>
+      </div>
+    </div>
+
+    <div class="section-label">When you'll be debt-free</div>
+    <div class="chart-card payoff-compare-card">
+      <div class="payoff-row">
+        <div class="payoff-lbl">Without extra</div>
+        <div class="payoff-track"><div class="payoff-fill grey" id="payoff-fill-base"></div></div>
+        <div class="payoff-time" id="payoff-time-base">0y</div>
+      </div>
+      <div class="payoff-row">
+        <div class="payoff-lbl">With extra</div>
+        <div class="payoff-track"><div class="payoff-fill green" id="payoff-fill-deposit"></div></div>
+        <div class="payoff-time" id="payoff-time-deposit">0y</div>
+      </div>
+      <div class="payoff-banner" id="payoff-banner">Enter an extra amount above to see the difference</div>
+    </div>
+
+    <div class="notice" id="loan-notice">General information only, based on the numbers you enter — an approximation, not a full amortisation schedule, and not financial advice.</div>
+    <!-- default matches the Mortgage preset above (no balloon); setLoanType swaps this in/out -->
+
+  </div>
+
+  <!-- Borrowing capacity -->
+  <div class="calc-card hidden" id="calc-borrow-card">
+    <div class="section-label" style="margin-top:0;">Loan type</div>
+    <div class="calc-tabs">
+      <button class="range-btn active" id="bctype-mortgage" onclick="setBcType('mortgage')">Mortgage</button>
+      <button class="range-btn" id="bctype-car" onclick="setBcType('car')">Car loan</button>
+      <button class="range-btn" id="bctype-personal" onclick="setBcType('personal')">Personal loan</button>
+    </div>
+
+    <div class="section-label" style="margin-top:0;">Your position</div>
+    <div class="field-grid">
+      <div class="field">
+        <label for="bc-income">Gross annual income</label>
+        <input type="number" id="bc-income" value="95000" min="0" step="1000">
+      </div>
+      <div class="field">
+        <label for="bc-expenses">Monthly living expenses</label>
+        <input type="number" id="bc-expenses" value="2200" min="0" step="50">
+      </div>
+      <div class="field">
+        <label for="bc-debts">Other monthly debts</label>
+        <input type="number" id="bc-debts" value="0" min="0" step="50">
+      </div>
+      <div class="field" id="bc-deposit-field">
+        <label for="bc-deposit" id="bc-deposit-label">Deposit available</label>
+        <input type="number" id="bc-deposit" value="60000" min="0" step="1000">
+      </div>
+      <div class="field">
+        <label for="bc-rate">Loan rate (%)</label>
+        <input type="number" id="bc-rate" value="6" min="0" step="0.05">
+      </div>
+      <div class="field">
+        <label for="bc-term">Loan term (years)</label>
+        <input type="number" id="bc-term" value="30" min="1" step="1">
+      </div>
+    </div>
+
+    <div class="hero-result g-dark">
+      <div class="h-lbl" id="bc-maxprice-label">Maximum property price</div>
+      <div class="h-amt" id="bc-maxprice">$0</div>
+      <div class="h-sub" id="bc-limiter"></div>
+    </div>
+    <div class="hero-row">
+      <div class="hero-mini g-green">
+        <div class="m-lbl">Loan amount</div>
+        <div class="m-amt" id="bc-loanamt">$0</div>
+      </div>
+      <div class="hero-mini g-blue" id="bc-depositused-card">
+        <div class="m-lbl" id="bc-depositused-label">Deposit used</div>
+        <div class="m-amt" id="bc-depositused">$0</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="s-lbl">Est. monthly repayment</div>
+        <div class="s-amt" id="bc-repayment">$0</div>
+      </div>
+      <div class="stat-card">
+        <div class="s-lbl">Assessed at (incl. buffer)</div>
+        <div class="s-amt" id="bc-assessrate">0%</div>
+      </div>
+    </div>
+    <div class="notice" id="bc-notice">Uses a 3% serviceability buffer on top of your entered rate, the same minimum buffer APRA requires lenders to apply. General information only, based on the numbers you enter — actual lending criteria vary by lender and this is not a loan pre-approval or financial advice.</div>
+  </div>
+
+  <!-- Take-home pay / income tax -->
+  <div class="calc-card hidden" id="calc-tax-card">
+    <div class="section-label" style="margin-top:0;">Your income</div>
+    <div class="field-grid">
+      <div class="field">
+        <label for="tax-income">Gross annual income</label>
+        <input type="number" id="tax-income" value="95000" min="0" step="1000">
+      </div>
+      <div class="field">
+        <label for="tax-help">HELP/HECS debt</label>
+        <select id="tax-help">
+          <option value="no">No</option>
+          <option value="yes">Yes</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="forecast-controls" style="margin-bottom:14px;">
+      <button class="range-btn active" data-period="week" onclick="setTaxPeriod('week')">Weekly</button>
+      <button class="range-btn" data-period="fortnight" onclick="setTaxPeriod('fortnight')">Fortnightly</button>
+      <button class="range-btn" data-period="month" onclick="setTaxPeriod('month')">Monthly</button>
+      <button class="range-btn" data-period="year" onclick="setTaxPeriod('year')">Annual</button>
+    </div>
+
+    <div class="hero-result g-green">
+      <div class="h-lbl">Take-home pay</div>
+      <div class="h-amt" id="tax-takehome">$0</div>
+      <div class="h-sub" id="tax-perweek"></div>
+    </div>
+    <div class="hero-row">
+      <div class="hero-mini g-dark">
+        <div class="m-lbl">Income tax</div>
+        <div class="m-amt" id="tax-incometax">$0</div>
+      </div>
+      <div class="hero-mini g-blue">
+        <div class="m-lbl">Medicare levy</div>
+        <div class="m-amt" id="tax-medicare">$0</div>
+      </div>
+    </div>
+
+    <div class="section-label">Take-home, every way</div>
+    <div class="stat-row">
+      <div class="stat-card income"><div class="s-lbl">Weekly</div><div class="s-amt" id="tax-tt-week">$0</div></div>
+      <div class="stat-card income"><div class="s-lbl">Fortnightly</div><div class="s-amt" id="tax-tt-fortnight">$0</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card income"><div class="s-lbl">Monthly</div><div class="s-amt" id="tax-tt-month">$0</div></div>
+      <div class="stat-card income"><div class="s-lbl">Annual</div><div class="s-amt" id="tax-tt-year">$0</div></div>
+    </div>
+
+    <div class="stat-row" id="tax-help-row" style="display:none;">
+      <div class="stat-card expense">
+        <div class="s-lbl">HELP repayment</div>
+        <div class="s-amt" id="tax-helpamt">$0</div>
+      </div>
+      <div class="stat-card">
+        <div class="s-lbl">Effective tax rate</div>
+        <div class="s-amt" id="tax-effrate">0%</div>
+      </div>
+    </div>
+    <div class="notice">Estimate based on 2026–27 Australian resident tax brackets and a flat 2% Medicare levy. HELP repayment is simplified (single marginal band above the minimum threshold). Doesn't include offsets, deductions, or the Medicare levy surcharge. General information only, not tax advice — for an exact figure, use the ATO's own calculator or speak with a registered tax agent.</div>
+  </div>
+</div>
+
+<!-- ADD TRANSACTION — bottom sheet, opened from the + button -->
+<div class="sheet-overlay" id="tx-sheet-overlay" onclick="if(event.target===this) closeTxSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title-row">
+      <h2>Add transaction</h2>
+      <button class="icon-btn" onclick="closeTxSheet()" aria-label="Close">✕</button>
+    </div>
+    <div class="tx-form">
+      <div class="type-toggle">
+        <button class="type-btn expense active" id="type-expense" onclick="setTxType('expense')">Expense</button>
+        <button class="type-btn income" id="type-income" onclick="setTxType('income')">Income</button>
+      </div>
+      <!-- Income already says what it is via its category (Salary/Wages,
+           Gift, etc.) — asking "what's it for" again is a redundant step
+           for something that's always just "money coming in". -->
+      <div class="field" id="tx-name-field">
+        <label for="tx-name">What's it for</label>
+        <input type="text" id="tx-name" placeholder="e.g. Groceries, Rent">
+      </div>
+      <div class="field">
+        <label for="tx-amount">Amount</label>
+        <input type="number" id="tx-amount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="field">
+        <label for="tx-category">Category</label>
+        <select id="tx-category"></select>
+      </div>
+      <!-- Expenses default to one-off (a purchase) — repeat is the
+           exception, so it's an opt-in checkbox. Income is the opposite:
+           it's basically never a one-off, so it skips the checkbox
+           entirely and just asks how often straight away. -->
+      <div class="recurring-check" id="tx-recurring-field">
+        <input type="checkbox" id="tx-recurring" onchange="toggleTxFrequencyField()">
+        <label for="tx-recurring">Repeats</label>
+      </div>
+      <div class="field" id="tx-frequency-field" style="display:none;">
+        <label for="tx-frequency" id="tx-frequency-label">How often</label>
+        <select id="tx-frequency">
+          <option value="weekly">Weekly</option>
+          <option value="fortnightly">Fortnightly</option>
+          <option value="monthly" selected>Monthly</option>
+          <option value="annually">Annually</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="addTransaction()">Add transaction</button>
+    </div>
+  </div>
+</div>
+
+<!-- Your loan — optional, one screen, entered whenever it's convenient
+     rather than gating anything at signup. Powers the Home habit card and
+     pre-fills the Loan payoff tool. -->
+<div class="sheet-overlay" id="loan-sheet-overlay" onclick="if(event.target===this) closeLoanSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title-row">
+      <h2>Your loan</h2>
+      <button class="icon-btn" onclick="closeLoanSheet()" aria-label="Close">✕</button>
+    </div>
+    <div class="tx-form">
+      <div class="field">
+        <label for="myloan-balance">Remaining loan amount</label>
+        <input type="number" id="myloan-balance" placeholder="e.g. 500000" min="0" step="500">
+      </div>
+      <div class="field">
+        <label for="myloan-rate">Interest rate (%)</label>
+        <input type="number" id="myloan-rate" placeholder="e.g. 6.5" min="0" step="0.1">
+      </div>
+      <div class="field">
+        <label for="myloan-term">Term remaining (years)</label>
+        <input type="number" id="myloan-term" placeholder="e.g. 25" min="0.5" step="0.5">
+      </div>
+      <button class="btn-primary" onclick="saveMyLoan()">Save</button>
+      <button class="link-btn" id="myloan-remove-btn" style="display:none;width:100%;text-align:center;margin-top:12px;color:var(--red);" onclick="removeMyLoan()">Remove loan</button>
+    </div>
+  </div>
+</div>
+
+<button class="fab" id="add-fab" onclick="openTxSheet()" aria-label="Add transaction">+</button>
+
+<nav class="tabbar">
+  <button class="tab-btn active" data-screen="home" onclick="showScreen('home')"><span class="tab-icon">◐</span>Home</button>
+  <button class="tab-btn" data-screen="log" onclick="showScreen('log')"><span class="tab-icon">▦</span>Saved</button>
+  <button class="tab-btn" data-screen="forecast" onclick="showScreen('forecast')"><span class="tab-icon">↗</span>Forecast</button>
+  <button class="tab-btn" data-screen="calculator" onclick="showScreen('calculator')"><span class="tab-icon">≡</span>Tools</button>
+</nav>
+
+<script>
+// ---------- Storage ----------
+const STORAGE_KEY = 'keepit_transactions';
+let transactions = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+let currentTxType = 'expense';
+let forecastMonths = 3;
+let showAllRecent = false;
+
+// Habits/subscriptions you've named yourself via "Other" — unlimited, kept
+// across sessions, one growing list per mode (not a single slot that gets
+// overwritten every time "Other" is used again).
+const CUSTOM_HABITS_KEY = 'keepit_custom_habits';
+let customHabits = { daily: [], subscription: [] };
+try{
+  const saved = JSON.parse(localStorage.getItem(CUSTOM_HABITS_KEY) || 'null');
+  if(saved && saved.daily && saved.subscription) customHabits = saved;
+}catch(e){}
+function saveCustomHabits(){ localStorage.setItem(CUSTOM_HABITS_KEY, JSON.stringify(customHabits)); }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function saveTx(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); }
+function money(n){ const sign = n<0?'-':''; return sign+'$'+Math.abs(Math.round(n)).toLocaleString('en-AU'); }
+
+// ---------- Navigation ----------
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
+  document.getElementById('screen-'+name).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.screen===name));
+  document.getElementById('add-fab').style.display = (name==='home') ? 'flex' : 'none';
+  if(name==='home'){ renderDashboard(); renderMyLoanSummary(); recalcHabit(); }
+  if(name==='forecast') renderForecast();
+  if(name==='log') renderLogCalendar();
+}
+
+// ---------- Add-transaction sheet ----------
+function openTxSheet(){
+  setTxType('expense');
+  document.getElementById('tx-sheet-overlay').classList.add('open');
+  document.getElementById('tx-name').focus();
+}
+function closeTxSheet(){
+  document.getElementById('tx-sheet-overlay').classList.remove('open');
+}
+
+// ---------- Your loan (optional, powers the Home habit card) ----------
+const MYLOAN_KEY = 'keepit_myloan';
+function loadMyLoan(){
+  try{ return JSON.parse(localStorage.getItem(MYLOAN_KEY)); } catch(e){ return null; }
+}
+function openLoanSheet(){
+  const loan = loadMyLoan();
+  document.getElementById('myloan-balance').value = loan ? loan.balance : '';
+  document.getElementById('myloan-rate').value = loan ? loan.rate : '';
+  document.getElementById('myloan-term').value = loan ? loan.term : '';
+  document.getElementById('myloan-remove-btn').style.display = loan ? 'block' : 'none';
+  document.getElementById('loan-sheet-overlay').classList.add('open');
+}
+function closeLoanSheet(){
+  document.getElementById('loan-sheet-overlay').classList.remove('open');
+}
+function saveMyLoan(){
+  const balance = parseFloat(document.getElementById('myloan-balance').value);
+  const rate = parseFloat(document.getElementById('myloan-rate').value);
+  const term = parseFloat(document.getElementById('myloan-term').value);
+  if(!balance || !rate || !term){ alert('Fill in all three fields'); return; }
+  localStorage.setItem(MYLOAN_KEY, JSON.stringify({balance, rate, term}));
+  closeLoanSheet();
+  renderMyLoanSummary();
+  recalcHabit();
+}
+function removeMyLoan(){
+  localStorage.removeItem(MYLOAN_KEY);
+  closeLoanSheet();
+  renderMyLoanSummary();
+  recalcHabit();
+}
+function renderMyLoanSummary(){
+  const loan = loadMyLoan();
+  document.getElementById('myloan-prompt').style.display = loan ? 'none' : 'flex';
+  document.getElementById('myloan-summary').style.display = loan ? 'flex' : 'none';
+  if(loan){
+    document.getElementById('myloan-summary-text').textContent =
+      `${money(loan.balance)} loan at ${loan.rate}%`;
+  }
+}
+
+// ---------- Everyday habit / Subscriptions (Home) ----------
+// Presets are a realistic downgrade, not an all-or-nothing ask — "spend $4
+// instead of $6" is something people actually believe they could do;
+// "spend $0" reads as a lecture and gets ignored.
+const HABITS = {
+  coffee: {now: 6,  then: 4,   unit: 'day'},
+  lunch:  {now: 15, then: 10,  unit: 'day'},
+  // A pack of 20 cigarettes averages ~$52 in Australia in 2026 (tax is
+  // ~75-80% of that) — real, sourced pricing, not a guess. "then" is a
+  // cut-down/vape level, not zero, for the same reason every other
+  // preset here is a realistic downgrade rather than an all-or-nothing ask.
+  smoke:  {now: 26, then: 10,  unit: 'day'},
+  other:  {now: 10, then: 5,   unit: 'day'}
+};
+// Current Australian monthly plan prices (Canstar, Spotify — Sep 2026).
+// "then" is the cheapest realistic alternative: an ad tier where one
+// exists, $0 (cancel) where it doesn't — never a made-up number.
+const SUBSCRIPTIONS = {
+  netflix: {now: 20.99, then: 9.99, unit: 'mo'},
+  disney:  {now: 17.99, then: 9.99, unit: 'mo'},
+  spotify: {now: 15.99, then: 0,    unit: 'mo'},
+  other:   {now: 15,    then: 0,    unit: 'mo'}
+};
+const HABIT_LABELS = {
+  coffee:'☕ Coffee', lunch:'🥡 Lunch out', smoke:'🚬 Cigarettes/Vapes',
+  netflix:'🎬 Netflix', disney:'🏰 Disney+', spotify:'🎵 Spotify'
+};
+
+// The picker isn't fixed-size: presets first, then whatever you've named
+// yourself via "Other" (unlimited — each one gets its own permanent chip,
+// not a single slot that gets overwritten), then "Other" always last so
+// there's always a way to add one more.
+const HABIT_PRESET_KEYS = { daily: ['coffee','lunch','smoke'], subscription: ['netflix','disney','spotify'] };
+
+let habitMode = 'daily';
+let selectedHabitKey = 'coffee';
+let habitNone = false;
+
+function getHabitPreset(mode, key){
+  const presets = mode==='daily' ? HABITS : SUBSCRIPTIONS;
+  if(key in presets) return presets[key];
+  const custom = (customHabits[mode]||[]).find(c=>c.key===key);
+  return custom ? {now:custom.now, then:custom.then} : {now:0, then:0};
+}
+function renderHabitPicker(mode){
+  const container = document.getElementById('habit-picker-'+(mode==='daily'?'daily':'subscription'));
+  let html = '';
+  HABIT_PRESET_KEYS[mode].forEach(k=>{
+    html += `<button class="range-btn${selectedHabitKey===k && habitMode===mode?' active':''}" data-habit="${k}" onclick="selectHabit('${k}')">${HABIT_LABELS[k]}</button>`;
+  });
+  (customHabits[mode]||[]).forEach(c=>{
+    html += `<button class="range-btn${selectedHabitKey===c.key && habitMode===mode?' active':''}" data-habit="${escapeHtml(c.key)}" onclick="selectHabit('${escapeHtml(c.key)}')">✏️ ${escapeHtml(c.label)}</button>`;
+  });
+  html += `<button class="range-btn${selectedHabitKey==='other' && habitMode===mode?' active':''}" data-habit="other" onclick="selectHabit('other')">➕ Other</button>`;
+  container.innerHTML = html;
+}
+function setHabitMode(mode){
+  habitMode = mode;
+  document.getElementById('habitmode-daily').classList.toggle('active', mode==='daily');
+  document.getElementById('habitmode-subscription').classList.toggle('active', mode==='subscription');
+  document.getElementById('habit-picker-daily').style.display = mode==='daily' ? 'flex' : 'none';
+  document.getElementById('habit-picker-subscription').style.display = mode==='subscription' ? 'flex' : 'none';
+  document.getElementById('habit-now-label').textContent = mode==='daily' ? 'You spend now (per day)' : 'Your current plan (per month)';
+  document.getElementById('habit-then-label').textContent = mode==='daily' ? 'Try spending (per day)' : 'Downgrade to, or cancel (per month)';
+  selectHabit(mode==='daily' ? 'coffee' : 'netflix');
+}
+function selectHabit(key){
+  selectedHabitKey = key;
+  const preset = getHabitPreset(habitMode, key);
+  renderHabitPicker(habitMode);
+  // "I don't do this" is a per-habit choice — switching to a different
+  // chip always starts fresh, fields enabled, box unticked.
+  habitNone = false;
+  document.getElementById('habit-none-toggle').checked = false;
+  document.getElementById('habit-now').disabled = false;
+  document.getElementById('habit-then').disabled = false;
+  document.getElementById('habit-now').value = preset.now;
+  document.getElementById('habit-then').value = preset.then;
+  // "Other" is the catch-all — anything not in the short list still gets a
+  // real name of its own instead of showing up as "Other" in your spending.
+  const nameField = document.getElementById('habit-custom-name-field');
+  nameField.style.display = key==='other' ? 'block' : 'none';
+  if(key==='other'){
+    document.getElementById('habit-custom-name').value = '';
+    document.getElementById('habit-custom-name').focus();
+  }
+  recalcHabit();
+}
+// One tap instead of three (open the field, clear "4", type "0"). Ticking
+// this zeroes and locks both fields and pulls the habit out of the saving
+// math entirely — someone who doesn't smoke shouldn't see a "you could
+// save" number for cigarettes at all.
+function toggleHabitNone(){
+  habitNone = document.getElementById('habit-none-toggle').checked;
+  document.getElementById('habit-now').disabled = habitNone;
+  document.getElementById('habit-then').disabled = habitNone;
+  if(habitNone){
+    document.getElementById('habit-now').value = 0;
+    document.getElementById('habit-then').value = 0;
+  } else {
+    const preset = getHabitPreset(habitMode, selectedHabitKey);
+    document.getElementById('habit-now').value = preset.now;
+    document.getElementById('habit-then').value = preset.then;
+  }
+  recalcHabit();
+}
+// Enter in the name field confirms it as its own permanent chip — no cap,
+// you can keep pressing Enter on a fresh "Other" pick for as many custom
+// habits/subscriptions as you want.
+function confirmCustomHabit(){
+  const label = document.getElementById('habit-custom-name').value.trim();
+  if(!label) return;
+  const now = parseFloat(document.getElementById('habit-now').value) || 0;
+  const then = parseFloat(document.getElementById('habit-then').value) || 0;
+  const key = 'custom_' + Date.now();
+  customHabits[habitMode] = customHabits[habitMode] || [];
+  customHabits[habitMode].push({key, label, now, then});
+  saveCustomHabits();
+  selectHabit(key);
+}
+function currentHabitLabel(){
+  if(selectedHabitKey === 'other'){
+    const custom = document.getElementById('habit-custom-name').value.trim();
+    return custom || (habitMode==='daily' ? 'Custom habit' : 'Custom subscription');
+  }
+  const custom = (customHabits[habitMode]||[]).find(c=>c.key===selectedHabitKey);
+  if(custom) return custom.label;
+  return HABIT_LABELS[selectedHabitKey];
+}
+function recalcHabit(){
+  const now = parseFloat(document.getElementById('habit-now').value) || 0;
+  const then = parseFloat(document.getElementById('habit-then').value) || 0;
+  const saving = Math.max(0, now - then);
+  // A daily habit needs ×30 to become monthly; a subscription price is
+  // already monthly, so it's used as-is — the one thing that must not be
+  // mixed up, or every subscription number would be 30× too small.
+  const monthlySaving = habitMode==='daily' ? saving*30 : saving;
+
+  const amtEl = document.getElementById('habit-save-amt');
+  const detailEl = document.getElementById('habit-save-detail');
+
+  if(saving <= 0){
+    animateNumber(amtEl, 0, v=>money(v)+'/mo');
+    detailEl.textContent = habitNone
+      ? "Nothing to save here — you're already not spending on this."
+      : (habitMode==='daily'
+        ? 'Try spending less than you do now to see the saving.'
+        : 'Pick a cheaper plan (or $0 to cancel) to see the saving.');
+    updateTrackButtonState();
+    updateSavingsHero();
+    return;
+  }
+
+  const loan = loadMyLoan();
+  if(loan){
+    // Real interest impact on the loan on file — reuses the exact same
+    // math as the Loan payoff tool, so the two numbers never disagree.
+    const impact = computeExtraImpact(loan.balance, loan.rate, loan.term, 0, monthlySaving, 'monthly');
+    animateNumber(amtEl, monthlySaving, v=>money(v)+'/mo');
+    // Informational, not an instruction — this describes what the numbers
+    // on your loan work out to, not a suggestion to pay anything specific.
+    detailEl.textContent = impact.interestSaved > 0
+      ? `Based on your loan, paying this in would save ${money(impact.interestSaved)} in interest and clear it ${impact.monthsSaved===0?'sooner':formatTerm(impact.monthsSaved/12,true)+' sooner'}.`
+      : `Based on your loan, ${money(monthlySaving)}/mo isn't quite enough yet to show a real interest saving — try a bit more.`;
+  } else {
+    animateNumber(amtEl, monthlySaving, v=>money(v)+'/mo');
+    detailEl.textContent = `That's ${money(monthlySaving*12)}/year — add your loan above to see what it works out to in interest saved.`;
+  }
+  updateTrackButtonState();
+  updateSavingsHero();
+}
+
+// "Track this" is what turns the what-if into real data: it drops a
+// recurring transaction for the NEW, lower spend straight into this
+// month's numbers, so the habit card isn't a dead-end calculator — it
+// feeds the same balance, category breakdown, and forecast as everything
+// else in the app. The saving is locked in on the transaction itself at the
+// moment you track it, rather than recomputed from a preset later — that's
+// what lets a custom "Other" entry (with no preset at all) work the same
+// way as Coffee or Netflix, and keeps a past tracked amount stable even if
+// a preset price changes down the track.
+function habitTrackKey(key, mode, label){
+  return key==='other' ? `other:${mode}:${label.toLowerCase()}` : `${key}:${mode}`;
+}
+function isHabitTracked(key, mode, label){
+  const trackKey = habitTrackKey(key, mode, label);
+  return transactions.some(t => t.habitTrackKey === trackKey);
+}
+function updateTrackButtonState(){
+  const btn = document.getElementById('habit-track-btn');
+  if(habitNone){
+    btn.textContent = "Nothing to track — you don't do this";
+    btn.disabled = true;
+  } else if(isHabitTracked(selectedHabitKey, habitMode, currentHabitLabel())){
+    btn.textContent = '✓ Tracking — already in your spending';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Track this — add to my monthly spending';
+    btn.disabled = false;
+  }
+}
+function trackHabit(){
+  if(habitNone) return;
+  const now = parseFloat(document.getElementById('habit-now').value) || 0;
+  const then = parseFloat(document.getElementById('habit-then').value) || 0;
+  if(now - then <= 0){ alert('Set a lower amount to try before tracking it.'); return; }
+
+  const label = currentHabitLabel();
+  if(isHabitTracked(selectedHabitKey, habitMode, label)) return;
+
+  const monthlySaving = habitMode==='daily' ? (now-then)*30 : (now-then);
+  const monthlySpend = habitMode==='daily' ? then*30 : then;
+  // Records what you're now committing to spend, not what you saved —
+  // "Spent this month" should only ever reflect real ongoing spend. A full
+  // cancel ($0) still gets a $0 entry, purely so it shows up as tracked.
+  transactions.unshift({
+    id: Date.now(),
+    name: `${label} (${monthlySpend>0 ? 'new plan' : 'cancelled'})`,
+    amount: monthlySpend,
+    category: habitMode==='subscription' ? 'Subscriptions' : 'Other',
+    recurring: true,
+    frequency: 'monthly',
+    type: 'expense',
+    date: new Date().toISOString(),
+    habitTrackKey: habitTrackKey(selectedHabitKey, habitMode, label),
+    habitSaving: monthlySaving
+  });
+  saveTx();
+  renderDashboard();
+  updateTrackButtonState();
+}
+
+// The top of Home is the true combined answer to "how much am I saving" —
+// every already-tracked habit PLUS whatever you currently have open in the
+// Everyday habit / Subscriptions tool below, even before you've hit Track.
+// Called on every keystroke in that tool (via recalcHabit) as well as after
+// tracking/untracking, so the number up top never lags behind what's on
+// screen — no separate "preview" total you have to scroll down to see.
+function updateSavingsHero(){
+  const tracked = transactions.filter(t => t.habitTrackKey);
+  const trackedTotal = tracked.reduce((sum,t) => sum + (t.habitSaving||0), 0);
+
+  // Live preview from whichever chip is currently selected in the tool.
+  const now = parseFloat(document.getElementById('habit-now').value) || 0;
+  const then = parseFloat(document.getElementById('habit-then').value) || 0;
+  const rawSaving = habitNone ? 0 : Math.max(0, now - then);
+  const previewMonthlySaving = habitMode==='daily' ? rawSaving*30 : rawSaving;
+  const previewLabel = currentHabitLabel();
+  // Don't double-count something that's already tracked — its saving is
+  // already inside trackedTotal.
+  const alreadyTracked = isHabitTracked(selectedHabitKey, habitMode, previewLabel);
+  const previewCounts = !alreadyTracked && previewMonthlySaving > 0
+    && !(selectedHabitKey==='other' && !document.getElementById('habit-custom-name').value.trim());
+
+  const total = trackedTotal + (previewCounts ? previewMonthlySaving : 0);
+
+  const section = document.getElementById('tracked-habits-section');
+  if(total <= 0){ section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  // The combined effect on the actual loan — not each habit run through the
+  // engine separately and added up (extra payments don't stack linearly
+  // against compounding interest), but the TOTAL monthly saving run through
+  // computeExtraImpact once, which is the mathematically correct way to
+  // combine several simultaneous extra repayments into one result.
+  const amtEl = document.getElementById('tracked-habits-amt');
+  const detailEl = document.getElementById('tracked-habits-hero-detail');
+  const loan = loadMyLoan();
+  animateNumber(amtEl, total, v=>money(v)+'/mo');
+  if(loan && total > 0){
+    const impact = computeExtraImpact(loan.balance, loan.rate, loan.term, 0, total, 'monthly');
+    // Informational, not an instruction — describes what the numbers on
+    // your loan work out to, not a suggestion to pay anything specific.
+    detailEl.textContent = impact.interestSaved > 0
+      ? `Based on your loan, paying this in would save ${money(impact.interestSaved)} in interest and clear it ${impact.monthsSaved===0?'sooner':formatTerm(impact.monthsSaved/12,true)+' sooner'}.`
+      : `Based on your loan, ${money(total)}/mo isn't quite enough yet to show a real interest saving — track another habit.`;
+  } else {
+    detailEl.textContent = `That's ${money(total*12)}/year — add your loan to see what it works out to in interest saved.`;
+  }
+}
+// Tracked-habit transaction names are stored as "🎬 Netflix (new plan)" —
+// split the leading emoji out for the icon circle so the row matches the
+// look of every other transaction list in the app; custom habits with no
+// emoji just fall back to a plain marker.
+function splitHabitIcon(fullName){
+  const m = fullName.match(/^(\p{Extended_Pictographic}(?:️)?)\s+(.*)$/u);
+  return m ? {icon: m[1], name: m[2]} : {icon: '💡', name: fullName};
+}
+
+// ---------- Saved (daily cash-flow log) ----------
+// Not a spending diary — a day-by-day record of which everyday habits you
+// actually stuck to. One tap per habit per day; no amounts to type, no
+// separate "log" object to fill in, because every number it needs
+// (the daily rate) already lives on the tracked transaction itself, same
+// as everything else in this app. "Don't break the chain" — a filled-in
+// calendar is its own reason to keep going, on top of the dollars.
+const DAILY_LOG_KEY = 'keepit_daily_logs';
+let dailyLogs = {};
+try{ dailyLogs = JSON.parse(localStorage.getItem(DAILY_LOG_KEY) || '{}'); }catch(e){ dailyLogs = {}; }
+function saveDailyLogs(){ localStorage.setItem(DAILY_LOG_KEY, JSON.stringify(dailyLogs)); }
+
+let logViewDate = new Date();
+let selectedLogDate = null;
+
+function dateKey(y, m, d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function todayKey(){ const t = new Date(); return dateKey(t.getFullYear(), t.getMonth(), t.getDate()); }
+// Subscriptions are monthly by nature — there's no daily "did you skip
+// Netflix today" to log, so only habitTrackKeys ending in ":daily" (the
+// Everyday habit mode) show up here.
+function getDailyTrackedHabits(){
+  return transactions.filter(t => t.habitTrackKey && t.habitTrackKey.endsWith(':daily'));
+}
+function shiftLogMonth(delta){
+  logViewDate = new Date(logViewDate.getFullYear(), logViewDate.getMonth()+delta, 1);
+  selectedLogDate = null;
+  document.getElementById('log-day-panel').style.display = 'none';
+  renderLogCalendar();
+}
+function renderLogCalendar(){
+  const dailyHabits = getDailyTrackedHabits();
+  const emptyEl = document.getElementById('log-empty-state');
+  const calCard = document.getElementById('log-calendar-card');
+  const dayPanel = document.getElementById('log-day-panel');
+
+  if(dailyHabits.length === 0){
+    emptyEl.style.display = 'block';
+    calCard.style.display = 'none';
+    dayPanel.style.display = 'none';
+    document.getElementById('log-month-total').textContent = money(0);
+    document.getElementById('log-month-detail').textContent = 'Track an everyday habit to start logging days.';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  calCard.style.display = 'block';
+
+  const year = logViewDate.getFullYear();
+  const month = logViewDate.getMonth();
+  document.getElementById('log-month-label').textContent =
+    logViewDate.toLocaleDateString('en-AU', {month:'long', year:'numeric'});
+
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const today = todayKey();
+
+  let cells = '';
+  for(let i=0;i<firstDow;i++) cells += `<button class="log-cal-cell empty" disabled></button>`;
+  let monthTotal = 0;
+  for(let d=1; d<=daysInMonth; d++){
+    const key = dateKey(year, month, d);
+    const log = dailyLogs[key] || {};
+    const loggedHabits = dailyHabits.filter(t => log[t.habitTrackKey]);
+    const daySaved = loggedHabits.reduce((s,t)=> s + (t.habitSaving||0)/30, 0);
+    monthTotal += daySaved;
+    const isFuture = key > today;
+    let cls = 'log-cal-cell';
+    if(isFuture) cls += ' future';
+    if(key === today) cls += ' today';
+    if(loggedHabits.length > 0) cls += ' logged';
+    if(selectedLogDate === key) cls += ' selected';
+    cells += `<button class="${cls}" ${isFuture?'disabled':''} onclick="openDayLog('${key}')">
+      <span class="log-cal-daynum">${d}</span>
+      ${loggedHabits.length>0 ? `<span class="log-cal-dot"></span>` : ''}
+    </button>`;
+  }
+  document.getElementById('log-cal-days').innerHTML = cells;
+
+  const amtEl = document.getElementById('log-month-total');
+  const detailEl = document.getElementById('log-month-detail');
+  animateNumber(amtEl, monthTotal, money);
+  const loan = loadMyLoan();
+  if(loan && monthTotal > 0){
+    // These are dollars already banked this month, not an ongoing monthly
+    // rate — so it's run through the engine as a one-off lump sum, not the
+    // 'monthly' mode Home uses for its projection.
+    const impact = computeExtraImpact(loan.balance, loan.rate, loan.term, 0, monthTotal, 'once');
+    detailEl.textContent = impact.interestSaved > 0
+      ? `Based on your loan, paying this in would save ${money(impact.interestSaved)} in interest.`
+      : 'Tap a day below to log which habits you stuck to.';
+  } else {
+    detailEl.textContent = 'Tap a day below to log which habits you stuck to.';
+  }
+
+  if(selectedLogDate) renderLogDayPanel(selectedLogDate);
+}
+function openDayLog(key){
+  selectedLogDate = key;
+  renderLogCalendar();
+  renderLogDayPanel(key);
+}
+function renderLogDayPanel(key){
+  const dailyHabits = getDailyTrackedHabits();
+  const panel = document.getElementById('log-day-panel');
+  panel.style.display = 'block';
+  const [y,m,d] = key.split('-').map(Number);
+  const dateObj = new Date(y, m-1, d);
+  const label = dateObj.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
+  document.getElementById('log-day-title').textContent = (key===todayKey() ? 'Today — ' : '') + label;
+
+  const log = dailyLogs[key] || {};
+  document.getElementById('log-day-habits').innerHTML = dailyHabits.map(t=>{
+    const {icon, name} = splitHabitIcon(t.name);
+    const done = !!log[t.habitTrackKey];
+    const daily = (t.habitSaving||0)/30;
+    return `<button class="log-habit-row ${done?'active':''}" onclick="toggleDayHabit('${key}','${t.habitTrackKey}')">
+      <span class="log-habit-name">${icon} ${escapeHtml(name)}</span>
+      <span class="log-habit-check">${done ? '✓ +'+money(daily) : 'Mark done'}</span>
+    </button>`;
+  }).join('');
+}
+function toggleDayHabit(key, trackKey){
+  if(!dailyLogs[key]) dailyLogs[key] = {};
+  dailyLogs[key][trackKey] = !dailyLogs[key][trackKey];
+  // Don't let all-false days pile up in storage forever.
+  if(!Object.values(dailyLogs[key]).some(Boolean)) delete dailyLogs[key];
+  saveDailyLogs();
+  renderLogCalendar();
+}
+
+const EXPENSE_CATEGORIES = ['Housing','Groceries','Transport','Subscriptions','Entertainment','Utilities','Savings','Other'];
+const INCOME_CATEGORIES = ['Salary/Wages','Side hustle/Freelance','Centrelink/Government payment','Investment/Interest','Gift','Other'];
+function setTxType(type){
+  currentTxType = type;
+  document.getElementById('type-expense').classList.toggle('active', type==='expense');
+  document.getElementById('type-income').classList.toggle('active', type==='income');
+
+  const catSelect = document.getElementById('tx-category');
+  const cats = type==='income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  catSelect.innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
+
+  // Income doesn't need its own name — the category already says what it
+  // is, so the field just disappears and the category becomes the name.
+  document.getElementById('tx-name-field').style.display = type==='income' ? 'none' : 'block';
+
+  // Income skips the checkbox — salary, Centrelink, etc. are basically
+  // always ongoing, so it goes straight to "how often" with an extra
+  // "One-off" choice for the odd tax refund or gift.
+  const recurringField = document.getElementById('tx-recurring-field');
+  const freqField = document.getElementById('tx-frequency-field');
+  const freqSelect = document.getElementById('tx-frequency');
+  const freqLabel = document.getElementById('tx-frequency-label');
+  if(type==='income'){
+    recurringField.style.display = 'none';
+    freqField.style.display = 'block';
+    freqLabel.textContent = 'How often';
+    freqSelect.innerHTML = `
+      <option value="">One-off</option>
+      <option value="weekly">Weekly</option>
+      <option value="fortnightly">Fortnightly</option>
+      <option value="monthly" selected>Monthly</option>
+      <option value="annually">Annually</option>`;
+  } else {
+    recurringField.style.display = 'flex';
+    freqSelect.innerHTML = `
+      <option value="weekly">Weekly</option>
+      <option value="fortnightly">Fortnightly</option>
+      <option value="monthly" selected>Monthly</option>
+      <option value="annually">Annually</option>`;
+    document.getElementById('tx-recurring').checked = false;
+    toggleTxFrequencyField();
+  }
+}
+
+// Not every recurring cost is monthly — rent might be weekly, a car
+// registration annual. Storing the real frequency (and converting to a
+// monthly-equivalent only where the math needs one number) keeps "Repeats
+// every month" from quietly mis-costing a fortnightly bill by 8%.
+function toggleTxFrequencyField(){
+  document.getElementById('tx-frequency-field').style.display =
+    document.getElementById('tx-recurring').checked ? 'block' : 'none';
+}
+const FREQUENCY_LABELS = { weekly:'Weekly', fortnightly:'Fortnightly', monthly:'Monthly', annually:'Annually' };
+const FREQUENCY_PER_YEAR = { weekly:52, fortnightly:26, monthly:12, annually:1 };
+function monthlyEquivalent(amount, frequency){
+  return amount * (FREQUENCY_PER_YEAR[frequency] || 12) / 12;
+}
+function addTransaction(){
+  const amount = parseFloat(document.getElementById('tx-amount').value);
+  const category = document.getElementById('tx-category').value;
+  // Income has no name field — the category IS the name.
+  const name = currentTxType==='income' ? category : document.getElementById('tx-name').value.trim();
+  // Income: no checkbox — "how often" is always on screen, and an empty
+  // value means the one-off option was picked. Expense: gated by the
+  // "Repeats" checkbox as before.
+  let recurring, frequency;
+  if(currentTxType === 'income'){
+    frequency = document.getElementById('tx-frequency').value || null;
+    recurring = !!frequency;
+  } else {
+    recurring = document.getElementById('tx-recurring').checked;
+    frequency = recurring ? document.getElementById('tx-frequency').value : null;
+  }
+  if(!name || !amount || amount<=0){
+    alert(currentTxType==='income' ? 'Enter an amount' : 'Enter a name and an amount');
+    return;
+  }
+
+  transactions.unshift({
+    id: Date.now(),
+    name, amount, category, recurring, frequency,
+    type: currentTxType,
+    date: new Date().toISOString()
+  });
+  saveTx();
+  document.getElementById('tx-name').value='';
+  document.getElementById('tx-amount').value='';
+  setTxType(currentTxType); // reset the checkbox/frequency fields for next time
+  closeTxSheet();
+  renderDashboard();
+}
+
+function deleteTx(id){
+  transactions = transactions.filter(t=>t.id!==id);
+  saveTx();
+  renderDashboard();
+}
+
+function toggleRecentView(){
+  showAllRecent = !showAllRecent;
+  renderDashboard();
+}
+
+function renderTxRows(list){
+  return list.map(t => `
+    <div class="tx-item">
+      <div class="tx-icon ${t.type}">${t.type==='income'?'↓':'↑'}</div>
+      <div class="tx-info">
+        <div class="tx-name">${t.name}</div>
+        <div class="tx-meta">${t.category}${t.recurring?' · '+(FREQUENCY_LABELS[t.frequency]||'Monthly'):''}</div>
+      </div>
+      <div class="tx-amt ${t.type}">${t.type==='income'?'+':'-'}${money(t.amount)}</div>
+      <button class="tx-delete" onclick="deleteTx(${t.id})" aria-label="Delete">×</button>
+    </div>
+  `).join('');
+}
+
+// ---------- Dashboard (Home) ----------
+function renderDashboard(){
+  updateSavingsHero();
+  const income = transactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense = transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const balance = income - expense;
+
+  animateNumber(document.getElementById('db-balance'), balance, money);
+  document.getElementById('db-balance-sub').textContent = transactions.length ? `${transactions.length} transaction${transactions.length===1?'':'s'} logged` : 'Add your first transaction to get started';
+  document.getElementById('db-income').textContent = money(income);
+  document.getElementById('db-expense').textContent = money(expense);
+
+  const recentEl = document.getElementById('db-recent');
+  const toggleBtn = document.getElementById('db-recent-toggle');
+  if(transactions.length===0){
+    recentEl.innerHTML = '<div class="empty-state small"><p>Nothing added yet — tap + to log your first transaction</p></div>';
+    toggleBtn.style.display = 'none';
+  } else {
+    const list = showAllRecent ? transactions : transactions.slice(0,5);
+    recentEl.innerHTML = renderTxRows(list);
+    toggleBtn.style.display = transactions.length > 5 ? 'block' : 'none';
+    toggleBtn.textContent = showAllRecent ? 'Show less' : 'Show all';
+  }
+
+  const catEl = document.getElementById('db-categories');
+  const expenses = transactions.filter(t=>t.type==='expense');
+  if(expenses.length===0){ catEl.innerHTML = '<div class="empty-state small"><p>No expenses logged yet</p></div>'; return; }
+
+  const byCategory = {};
+  expenses.forEach(t => byCategory[t.category] = (byCategory[t.category]||0) + t.amount);
+  const total = Object.values(byCategory).reduce((a,b)=>a+b,0);
+  const colors = ['#D6553E','#E8A83E','#1E9E82','#5C7CE8','#B15CE8','#E85C9B','#8B93A1'];
+  const sorted = Object.entries(byCategory).sort((a,b)=>b[1]-a[1]);
+
+  catEl.innerHTML = sorted.map(([cat,amt],i) => `
+    <div class="cat-row" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="cat-dot" style="background:${colors[i%colors.length]}"></div>
+        <div class="cat-name">${cat}</div>
+        <div class="cat-amt">${money(amt)}</div>
+      </div>
+      <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${(amt/total*100).toFixed(0)}%;background:${colors[i%colors.length]}"></div></div>
+    </div>
+  `).join('');
+}
+
+// ---------- Forecast ----------
+function setForecastRange(m){
+  forecastMonths = m;
+  document.querySelectorAll('#screen-forecast .range-btn').forEach(b=>b.classList.toggle('active', parseInt(b.dataset.months)===m));
+  renderForecast();
+}
+
+function renderForecast(){
+  const recurring = transactions.filter(t=>t.recurring);
+  const currentBalance = transactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0)
+                        - transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  // Each recurring item is converted to its monthly-equivalent before being
+  // summed — weekly and fortnightly items are NOT the same size as a
+  // monthly one, so projecting month-by-month needs the converted figure,
+  // not the raw per-occurrence amount.
+  const monthlyNet = recurring.reduce((s,t)=>{
+    const eq = monthlyEquivalent(t.amount, t.frequency || 'monthly');
+    return s + (t.type==='income'? eq : -eq);
+  }, 0);
+
+  const points = [];
+  for(let m=0; m<=forecastMonths; m++){ points.push(currentBalance + monthlyNet*m); }
+
+  const svg = document.getElementById('forecast-chart');
+  const w=400,h=180,pad=20;
+  const min = Math.min(...points,0), max = Math.max(...points,1);
+  const range = (max-min) || 1;
+  const x = i => pad + (i/(points.length-1)) * (w-2*pad);
+  const y = v => h-pad - ((v-min)/range) * (h-2*pad);
+  const pathD = points.map((v,i)=> (i===0?'M':'L')+x(i)+','+y(v)).join(' ');
+  const areaD = pathD + ` L${x(points.length-1)},${h-pad} L${x(0)},${h-pad} Z`;
+
+  svg.innerHTML = `
+    <path d="${areaD}" fill="#1E9E82" opacity="0.12"/>
+    <path d="${pathD}" fill="none" stroke="#1E9E82" stroke-width="2.5"/>
+    ${points.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="#1E9E82"/>`).join('')}
+  `;
+
+  document.getElementById('forecast-note').textContent =
+    recurring.length===0
+      ? 'Mark some transactions as recurring to see a projection here.'
+      : `At this pace, your balance moves by ${money(monthlyNet)} per month, reaching ${money(points[points.length-1])} in ${forecastMonths} months.`;
+
+  const listEl = document.getElementById('forecast-list');
+  if(recurring.length===0){ listEl.innerHTML = '<div class="empty-state"><p>Mark a transaction as recurring to see it here</p></div>'; return; }
+  listEl.innerHTML = renderTxRows(recurring);
+}
+
+// ---------- Calculator ----------
+function recalcCalc(){
+  const amount = parseFloat(document.getElementById('calc-amount').value) || 0;
+  const rate = parseFloat(document.getElementById('calc-rate').value) || 0;
+  const years = parseFloat(document.getElementById('calc-years').value) || 0;
+  const mode = document.getElementById('calc-mode').value;
+  const grown = amount * Math.pow(1+rate/100, years);
+  const gain = grown - amount;
+
+  if(mode==='growth'){
+    document.getElementById('calc-r-label').textContent = 'This amount could grow to';
+    document.getElementById('calc-r-amt').textContent = money(grown);
+    document.getElementById('calc-r-detail').textContent = `That's ${money(gain)} of compound growth over ${years} year${years==1?'':'s'} at ${rate}% p.a.`;
+  } else {
+    document.getElementById('calc-r-label').textContent = 'This could reduce your interest by';
+    document.getElementById('calc-r-amt').textContent = money(gain);
+    document.getElementById('calc-r-detail').textContent = `Keeping ${money(amount)} in an offset at ${rate}% p.a. for ${years} year${years==1?'':'s'} — an approximation, not a full amortisation schedule.`;
+  }
+}
+['calc-amount','calc-rate','calc-years','calc-mode'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', recalcCalc);
+  document.getElementById(id).addEventListener('change', recalcCalc);
+});
+
+// ---------- Loan payoff ----------
+function setCalcTab(tab){
+  document.getElementById('calctab-growth').classList.toggle('active', tab==='growth');
+  document.getElementById('calctab-loan').classList.toggle('active', tab==='loan');
+  document.getElementById('calctab-borrow').classList.toggle('active', tab==='borrow');
+  document.getElementById('calctab-tax').classList.toggle('active', tab==='tax');
+  document.getElementById('calc-growth-card').classList.toggle('hidden', tab!=='growth');
+  document.getElementById('calc-loan-card').classList.toggle('hidden', tab!=='loan');
+  document.getElementById('calc-borrow-card').classList.toggle('hidden', tab!=='borrow');
+  document.getElementById('calc-tax-card').classList.toggle('hidden', tab!=='tax');
+  if(tab==='loan') recalcLoan();
+  if(tab==='borrow') recalcBorrow();
+  if(tab==='tax') recalcTax();
+}
+
+// Presets reflect the current Australian averages, not round numbers —
+// mortgage: Canstar/RBA average owner-occupier loan size & variable rate;
+// car & personal: money.com.au's 2026 lending data. Real numbers make the
+// calculator feel credible the moment someone opens it, before they've
+// typed anything themselves.
+const LOAN_PRESETS = {
+  mortgage: {balance: 731000, rate: 6.62, term: 30, balloon: 0,     hasBalloon: false},
+  car:      {balance: 34282,  rate: 9.07, term: 5,  balloon: 10300, hasBalloon: false},
+  personal: {balance: 18169,  rate: 13.87,term: 3,  balloon: 0,     hasBalloon: false}
+};
+
+function setLoanType(type){
+  ['mortgage','car','personal'].forEach(t => document.getElementById('loantype-'+t).classList.toggle('active', t===type));
+  const p = LOAN_PRESETS[type];
+  document.getElementById('loan-balance').value = p.balance;
+  document.getElementById('loan-rate').value = p.rate;
+  document.getElementById('loan-term').value = p.term;
+  document.getElementById('loan-balloon').value = p.balloon;
+
+  // Mortgages essentially never carry a balloon, so the option doesn't even
+  // appear. Car and personal loans get a tick-box — off by default, since
+  // most loans of either kind don't have one; ticking it reveals the amount.
+  const toggleField = document.getElementById('loan-balloon-toggle-field');
+  const toggle = document.getElementById('loan-balloon-toggle');
+  if(type === 'mortgage'){
+    toggleField.style.display = 'none';
+    toggle.checked = false;
+  } else {
+    toggleField.style.display = 'flex';
+    toggle.checked = p.hasBalloon;
+  }
+  toggleBalloonField();
+
+  document.getElementById('loan-notice').textContent = type === 'mortgage'
+    ? "General information only, based on the numbers you enter — an approximation, not a full amortisation schedule, and not financial advice."
+    : "General information only, based on the numbers you enter — an approximation, not a full amortisation schedule, and not financial advice. A balloon payment is a lump sum still owing at the end of the term.";
+  recalcLoan();
+}
+
+function toggleBalloonField(){
+  const checked = document.getElementById('loan-balloon-toggle').checked;
+  document.getElementById('loan-balloon-field').style.display = checked ? 'block' : 'none';
+  if(!checked) document.getElementById('loan-balloon').value = 0;
+  recalcLoan();
+}
+
+function regularPayment(principal, monthlyRate, n, balloon){
+  if(monthlyRate === 0) return (principal - balloon) / n;
+  const g = Math.pow(1+monthlyRate, n);
+  return monthlyRate * (principal*g - balloon) / (g - 1);
+}
+
+function amortSchedule(balance, monthlyRate, payment, maxMonths, targetBalance){
+  targetBalance = targetBalance || 0;
+  let bal = balance, months = 0, interest = 0;
+  const balances = [bal];
+  while(bal > targetBalance + 0.01 && months < maxMonths){
+    const int = bal*monthlyRate;
+    const princ = Math.min(payment - int, bal - targetBalance);
+    if(princ <= 0){ months = maxMonths; break; }
+    bal -= princ;
+    interest += int;
+    months++;
+    balances.push(bal);
+  }
+  return {months, interest, balances, finalBalance: bal};
+}
+
+// ---------- Feedback micro-animations ----------
+// Counts a number up/down to its new value instead of snapping — a small
+// "win" cue (same trick balance apps use) that also makes a change register
+// as real, rather than the number just silently being different.
+function animateNumber(el, newValue, formatter){
+  const prevRaw = el.dataset.rawVal !== undefined ? parseFloat(el.dataset.rawVal) : newValue;
+  el.dataset.rawVal = newValue;
+  if(Math.abs(newValue-prevRaw) < 0.5){ el.textContent = formatter(newValue); return; }
+  const start = performance.now(), duration = 420;
+  function tick(now){
+    const p = Math.min((now-start)/duration, 1);
+    const eased = 1 - Math.pow(1-p, 3);
+    el.textContent = formatter(prevRaw + (newValue-prevRaw)*eased);
+    if(p<1) requestAnimationFrame(tick);
+    else el.textContent = formatter(newValue);
+  }
+  requestAnimationFrame(tick);
+  el.closest('.hero-result, .hero-mini, .stat-card, .balance-card')?.classList.remove('bump');
+  void el.offsetWidth;
+  el.closest('.hero-result, .hero-mini, .stat-card, .balance-card')?.classList.add('bump');
+}
+
+let extraMode = 'once'; // 'once' = lump sum today, 'monthly' = extra added to every repayment
+
+function setExtraMode(mode){
+  extraMode = mode;
+  document.getElementById('extramode-once').classList.toggle('active', mode==='once');
+  document.getElementById('extramode-monthly').classList.toggle('active', mode==='monthly');
+  document.getElementById('loan-extra-label').textContent = mode==='once'
+    ? 'Extra repayment / offset amount'
+    : 'Extra amount, every month';
+  recalcLoan();
+}
+
+// Shared by the Tools > Loan payoff card AND the Home habit card, so both
+// give the same answer for the same numbers. mode 'once' = lump sum today;
+// 'monthly' = extra added to every repayment from now on (what a recurring
+// habit-change actually is).
+function computeExtraImpact(balance, ratePct, termYears, balloon, extra, mode){
+  const termMonths = Math.round(termYears*12);
+  const monthlyRate = ratePct/100/12;
+  const basePayment = regularPayment(balance, monthlyRate, termMonths, balloon);
+  const baseResult = amortSchedule(balance, monthlyRate, basePayment, termMonths, balloon);
+
+  let withExtraResult, newBalanceOrPayment, newBalanceLbl;
+  if(mode === 'once'){
+    const newBalance = Math.max(balance - extra, 0);
+    withExtraResult = amortSchedule(newBalance, monthlyRate, basePayment, termMonths, balloon);
+    newBalanceOrPayment = newBalance;
+    newBalanceLbl = 'New balance';
+  } else {
+    const newPayment = basePayment + extra;
+    withExtraResult = amortSchedule(balance, monthlyRate, newPayment, termMonths, balloon);
+    newBalanceOrPayment = newPayment;
+    newBalanceLbl = 'New monthly repayment';
+  }
+
+  const monthsSaved = Math.max(0, baseResult.months - withExtraResult.months);
+  const interestSaved = Math.max(0, baseResult.interest - withExtraResult.interest);
+  return {basePayment, baseResult, withExtraResult, monthsSaved, interestSaved, newBalanceOrPayment, newBalanceLbl};
+}
+
+function recalcLoan(){
+  const balance = parseFloat(document.getElementById('loan-balance').value) || 0;
+  const rate = parseFloat(document.getElementById('loan-rate').value) || 0;
+  const termYears = parseFloat(document.getElementById('loan-term').value) || 0.5;
+  const balloon = Math.min(parseFloat(document.getElementById('loan-balloon').value) || 0, balance);
+  const extra = parseFloat(document.getElementById('loan-extra').value) || 0;
+
+  // The regular repayment itself is deliberately not shown here — that
+  // number belongs to Borrowing capacity. This tool only answers one
+  // question: what does the extra amount buy you?
+  const r = computeExtraImpact(balance, rate, termYears, balloon, extra, extraMode);
+  const {baseResult, withExtraResult, monthsSaved, interestSaved, newBalanceOrPayment, newBalanceLbl} = r;
+
+  // Lead with whichever number is the biggest win — usually interest saved,
+  // since a modest extra payment can return several times itself in interest.
+  // That's the figure people feel, so it goes first and biggest.
+  animateNumber(document.getElementById('loan-r-amt'), interestSaved, money);
+  // "×" badge instead of a sentence doing the multiplication — reads like
+  // betting/trading odds ("1.5×"), which tests as less ambiguous than a
+  // percentage (is 150% one-and-a-half times, or two-and-a-half?). In
+  // monthly mode this is interest saved ÷ the total extra paid in over the
+  // shortened term — still "what you got back for what you put in".
+  const totalPutIn = extraMode==='once' ? extra : extra * withExtraResult.months;
+  const multiplier = totalPutIn>0 ? interestSaved/totalPutIn : 0;
+  document.getElementById('loan-r-multiplier').textContent = totalPutIn>0 ? multiplier.toFixed(1)+'×' : '—';
+  document.getElementById('loan-r-detail').textContent = extra>0 && interestSaved>0
+    ? (extraMode==='once' ? `on a ${money(extra)} extra repayment` : `on an extra ${money(extra)} every month`)
+    : 'Add an extra repayment above to see how much interest it saves.';
+
+  document.getElementById('loan-months-saved').textContent = monthsSaved===0 ? 'Same' : formatTerm(monthsSaved/12, true);
+  document.getElementById('loan-newbalance-lbl').textContent = newBalanceLbl;
+  animateNumber(document.getElementById('loan-newbalance'), newBalanceOrPayment, extraMode==='once' ? money : (v=>money(v)+'/mo'));
+
+  renderPayoffCompare(baseResult.months, withExtraResult.months, monthsSaved, interestSaved);
+}
+
+function formatTerm(years, short){
+  if(years < 1){
+    const m = Math.round(years*12);
+    return short ? `${m} mth${m===1?'':'s'}` : `${m} month${m===1?'':'s'}`;
+  }
+  const wholeYears = Math.floor(years);
+  const remMonths = Math.round((years-wholeYears)*12);
+  let out = short ? `${wholeYears}y` : `${wholeYears} year${wholeYears===1?'':'s'}`;
+  if(remMonths > 0) out += short ? ` ${remMonths}m` : ` ${remMonths} month${remMonths===1?'':'s'}`;
+  return out;
+}
+
+// Two horizontal bars (payoff length, without vs with the deposit) instead of
+// a decade-long balance curve — at large loan amounts a small deposit is
+// invisible on a dollar-scale chart, but "sooner by X months" reads instantly
+// as a bar that's visibly shorter, which is the actual question being asked.
+function renderPayoffCompare(baseMonths, depositMonths, monthsSaved, interestSaved){
+  const baseFill = document.getElementById('payoff-fill-base');
+  const depositFill = document.getElementById('payoff-fill-deposit');
+  const banner = document.getElementById('payoff-banner');
+
+  const longest = Math.max(baseMonths, 1);
+  baseFill.style.width = '100%';
+  depositFill.style.width = Math.max((depositMonths/longest)*100, depositMonths>0?2:0) + '%';
+
+  document.getElementById('payoff-time-base').textContent = formatTerm(baseMonths/12, true);
+  document.getElementById('payoff-time-deposit').textContent = formatTerm(depositMonths/12, true);
+
+  if(monthsSaved > 0){
+    banner.className = 'payoff-banner';
+    banner.textContent = `🎉 Debt-free ${formatTerm(monthsSaved/12, true)} sooner — ${money(interestSaved)} less interest`;
+  } else {
+    banner.className = 'payoff-banner neutral';
+    banner.textContent = 'Add an extra repayment above to pay it off sooner';
+  }
+}
+
+['loan-balance','loan-rate','loan-term','loan-balloon','loan-extra'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', recalcLoan);
+  document.getElementById(id).addEventListener('change', recalcLoan);
+});
+
+// ---------- Income tax (2026-27 ATO resident brackets) ----------
+function calcIncomeTax(income){
+  const brackets = [
+    {upTo: 18200, rate: 0, base: 0},
+    {upTo: 45000, rate: 0.15, base: 0},
+    {upTo: 135000, rate: 0.30, base: 4020},
+    {upTo: 190000, rate: 0.37, base: 31020},
+    {upTo: Infinity, rate: 0.45, base: 51370}
+  ];
+  let bracketStart = [18200, 18200, 45000, 135000, 190000];
+  for(let i=0;i<brackets.length;i++){
+    if(income <= brackets[i].upTo){
+      return brackets[i].base + (income - bracketStart[i]) * brackets[i].rate;
+    }
+  }
+}
+
+function calcMedicareLevy(income){
+  if(income <= 27222) return 0;
+  if(income <= 34027) return (income - 27222) * 0.10;
+  return income * 0.02;
+}
+
+function calcHelp(income){
+  const threshold = 69528;
+  if(income <= threshold) return 0;
+  return (income - threshold) * 0.15;
+}
+
+let taxPeriod = 'week';
+const PERIOD_DIVISORS = {week: 52, fortnight: 26, month: 12, year: 1};
+const PERIOD_LABELS = {week: 'week', fortnight: 'fortnight', month: 'month', year: 'year'};
+
+function setTaxPeriod(period){
+  taxPeriod = period;
+  document.querySelectorAll('#screen-calculator .forecast-controls .range-btn').forEach(b=>
+    b.classList.toggle('active', b.dataset.period===period));
+  recalcTax();
+}
+
+function recalcTax(){
+  const income = parseFloat(document.getElementById('tax-income').value) || 0;
+  const hasHelp = document.getElementById('tax-help').value === 'yes';
+
+  const incomeTax = Math.max(calcIncomeTax(income), 0);
+  const medicare = calcMedicareLevy(income);
+  const help = hasHelp ? calcHelp(income) : 0;
+  const takeHome = income - incomeTax - medicare - help;
+
+  const divisor = PERIOD_DIVISORS[taxPeriod];
+  document.getElementById('tax-takehome').textContent = money(takeHome/divisor);
+  document.getElementById('tax-perweek').textContent = `That's your take-home pay per ${PERIOD_LABELS[taxPeriod]}, after tax${hasHelp?', Medicare and HELP':' and Medicare'}.`;
+  document.getElementById('tax-incometax').textContent = money(incomeTax/divisor);
+  document.getElementById('tax-medicare').textContent = money(medicare/divisor);
+
+  document.getElementById('tax-tt-week').textContent = money(takeHome/52);
+  document.getElementById('tax-tt-fortnight').textContent = money(takeHome/26);
+  document.getElementById('tax-tt-month').textContent = money(takeHome/12);
+  document.getElementById('tax-tt-year').textContent = money(takeHome);
+
+  document.getElementById('tax-help-row').style.display = hasHelp ? 'grid' : 'none';
+  if(hasHelp){
+    document.getElementById('tax-helpamt').textContent = money(help/divisor);
+    document.getElementById('tax-effrate').textContent = (((incomeTax+medicare+help)/income)*100 || 0).toFixed(1) + '%';
+  }
+}
+['tax-income','tax-help'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', recalcTax);
+  document.getElementById(id).addEventListener('change', recalcTax);
+});
+
+// ---------- Borrowing capacity ----------
+let bcType = 'mortgage';
+const BC_PRESETS = {
+  mortgage: {rate: 6,  term: 30, buffer: 3,   deposit: 60000, depositLabel: 'Deposit available',    priceLabel: 'Maximum property price',   showDeposit: true},
+  car:      {rate: 9,  term: 6,  buffer: 0,   deposit: 5000,  depositLabel: 'Trade-in / deposit',    priceLabel: 'Maximum car price',        showDeposit: true},
+  personal: {rate: 12, term: 5,  buffer: 0,   deposit: 0,     depositLabel: 'Deposit available',     priceLabel: 'Maximum loan amount',      showDeposit: false}
+};
+
+function setBcType(type){
+  bcType = type;
+  ['mortgage','car','personal'].forEach(t => document.getElementById('bctype-'+t).classList.toggle('active', t===type));
+  const p = BC_PRESETS[type];
+  document.getElementById('bc-rate').value = p.rate;
+  document.getElementById('bc-term').value = p.term;
+  document.getElementById('bc-deposit').value = p.deposit;
+  document.getElementById('bc-deposit-label').textContent = p.depositLabel;
+  document.getElementById('bc-maxprice-label').textContent = p.priceLabel;
+  document.getElementById('bc-deposit-field').style.display = p.showDeposit ? 'block' : 'none';
+  document.getElementById('bc-depositused-card').style.display = p.showDeposit ? 'block' : 'none';
+
+  document.getElementById('bc-notice').textContent = type==='mortgage'
+    ? 'Uses a 3% serviceability buffer on top of your entered rate, the same minimum buffer APRA requires lenders to apply to home loans. General information only, based on the numbers you enter — actual lending criteria vary by lender and this is not a loan pre-approval or financial advice.'
+    : `APRA's 3% buffer specifically applies to home loans — ${type==='car'?'car':'personal'} loans aren't held to a fixed buffer, so this uses your entered rate directly. Individual lenders may still apply their own margin. General information only, not a loan pre-approval or financial advice.`;
+
+  recalcBorrow();
+}
+
+function maxLoanForPayment(payment, monthlyRate, termMonths){
+  if(monthlyRate === 0) return payment * termMonths;
+  return payment * (1 - Math.pow(1+monthlyRate, -termMonths)) / monthlyRate;
+}
+
+function recalcBorrow(){
+  const income = parseFloat(document.getElementById('bc-income').value) || 0;
+  const expenses = parseFloat(document.getElementById('bc-expenses').value) || 0;
+  const debts = parseFloat(document.getElementById('bc-debts').value) || 0;
+  const deposit = BC_PRESETS[bcType].showDeposit ? (parseFloat(document.getElementById('bc-deposit').value) || 0) : 0;
+  const rate = parseFloat(document.getElementById('bc-rate').value) || 0;
+  const termYears = parseFloat(document.getElementById('bc-term').value) || 30;
+  const buffer = BC_PRESETS[bcType].buffer;
+
+  const incomeTax = Math.max(calcIncomeTax(income), 0);
+  const medicare = calcMedicareLevy(income);
+  const netMonthly = (income - incomeTax - medicare) / 12;
+
+  const assessRate = rate + buffer;
+  const monthlyAssessRate = assessRate/100/12;
+  const termMonths = termYears*12;
+
+  const surplus = Math.max(netMonthly - expenses - debts, 0);
+  const maxLoan = maxLoanForPayment(surplus, monthlyAssessRate, termMonths);
+  const maxPrice = maxLoan + deposit;
+
+  const actualMonthlyRate = rate/100/12;
+  const actualPayment = actualMonthlyRate===0 ? maxLoan/termMonths : maxLoan*actualMonthlyRate/(1-Math.pow(1+actualMonthlyRate,-termMonths));
+
+  document.getElementById('bc-maxprice').textContent = money(maxPrice);
+  document.getElementById('bc-limiter').textContent = surplus<=0 ? "Living expenses and debts currently exceed your net income" : "Based on your income, expenses" + (BC_PRESETS[bcType].showDeposit ? " and deposit" : "");
+  document.getElementById('bc-loanamt').textContent = money(maxLoan);
+  document.getElementById('bc-depositused').textContent = money(deposit);
+  document.getElementById('bc-repayment').textContent = money(actualPayment) + '/mo';
+  document.getElementById('bc-assessrate').textContent = assessRate.toFixed(2) + '%';
+}
+['bc-income','bc-expenses','bc-debts','bc-deposit','bc-rate','bc-term'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', recalcBorrow);
+  document.getElementById(id).addEventListener('change', recalcBorrow);
+});
+
+// ---------- Init ----------
+recalcCalc();
+recalcLoan();
+recalcBorrow();
+recalcTax();
+renderHabitPicker('daily');
+renderHabitPicker('subscription');
+renderDashboard();
+showScreen('home');
+</script>
+</body>
+</html>
