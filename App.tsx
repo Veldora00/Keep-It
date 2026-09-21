@@ -4,12 +4,14 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, Text } from 'react-native';
+import { ActivityIndicator, View, Text } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, Fraunces_400Regular, Fraunces_500Medium, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 import { StoreProvider } from './src/lib/store';
+import { AuthProvider, useAuth } from './src/lib/auth';
+import AuthScreen from './src/screens/AuthScreen';
 import { colors } from './src/theme/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import SavedScreen from './src/screens/SavedScreen';
@@ -50,28 +52,50 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StoreProvider>
+      <AuthProvider>
         <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-          <NavigationContainer>
-            <Tab.Navigator
-              screenOptions={({ route }) => ({
-                headerShown: false,
-                tabBarActiveTintColor: colors.accentDeep,
-                tabBarInactiveTintColor: colors.inkFaint,
-                tabBarStyle: { backgroundColor: colors.paper, borderTopColor: colors.line },
-                tabBarIcon: () => <Text style={{ fontSize: 20 }}>{TAB_ICONS[route.name]}</Text>,
-                tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-              })}
-            >
-              <Tab.Screen name="Home" component={HomeScreen} />
-              <Tab.Screen name="Saved" component={SavedScreen} />
-              <Tab.Screen name="Forecast" component={ForecastScreen} />
-              <Tab.Screen name="Tools" component={ToolsScreen} />
-            </Tab.Navigator>
-          </NavigationContainer>
+          <AppGate />
           <StatusBar style="dark" />
         </View>
-      </StoreProvider>
+      </AuthProvider>
     </SafeAreaProvider>
+  );
+}
+
+function AppGate() {
+  const { session, initializing } = useAuth();
+
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paperWarm }}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
+  return (
+    <StoreProvider>
+      <NavigationContainer>
+        <Tab.Navigator
+          screenOptions={({ route }) => ({
+            headerShown: false,
+            tabBarActiveTintColor: colors.accentDeep,
+            tabBarInactiveTintColor: colors.inkFaint,
+            tabBarStyle: { backgroundColor: colors.paper, borderTopColor: colors.line },
+            tabBarIcon: () => <Text style={{ fontSize: 20 }}>{TAB_ICONS[route.name]}</Text>,
+            tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+          })}
+        >
+          <Tab.Screen name="Home" component={HomeScreen} />
+          <Tab.Screen name="Saved" component={SavedScreen} />
+          <Tab.Screen name="Forecast" component={ForecastScreen} />
+          <Tab.Screen name="Tools" component={ToolsScreen} />
+        </Tab.Navigator>
+      </NavigationContainer>
+    </StoreProvider>
   );
 }

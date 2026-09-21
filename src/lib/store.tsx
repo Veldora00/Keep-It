@@ -1,11 +1,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CustomHabits, DailyLogs, HabitMode, MyLoan, Transaction } from './types';
+import { useAuth } from './auth';
+import { supabase } from './supabase';
+import { CustomHabit, CustomHabits, DailyLogs, HabitMode, MyLoan, Transaction } from './types';
 
-const STORAGE_KEY = 'keepit_transactions';
-const CUSTOM_HABITS_KEY = 'keepit_custom_habits';
-const DAILY_LOG_KEY = 'keepit_daily_logs';
-const MYLOAN_KEY = 'keepit_myloan';
+// Legacy unscoped keys — this is where data lived before accounts existed.
+// Read once per device, on the very first login, then migrated to the cloud and cleared.
+const LEGACY_TX_KEY = 'keepit_transactions';
+const LEGACY_CH_KEY = 'keepit_custom_habits';
+const LEGACY_DL_KEY = 'keepit_daily_logs';
+const LEGACY_ML_KEY = 'keepit_myloan';
+
+function scopedKey(base: string, userId: string) {
+  return `${base}:${userId}`;
+}
+
+function migratedFlagKey(userId: string) {
+  return `keepit_migrated:${userId}`;
+}
 
 interface Store {
   ready: boolean;
@@ -30,68 +42,181 @@ export function habitTrackKeyFn(key: string, mode: HabitMode, label: string): st
   return key === 'other' ? `other:${mode}:${label.toLowerCase()}` : `${key}:${mode}`;
 }
 
+function txFromRow(row: any): Transaction {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    amount: Number(row.amount),
+    category: row.category,
+    recurring: row.recurring,
+    frequency: row.frequency,
+    type: row.type,
+    date: row.date,
+    habitTrackKey: row.habit_track_key ?? undefined,
+    habitSaving: row.habit_saving != null ? Number(row.habit_saving) : undefined,
+  };
+}
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  const userId = session?.user?.id ?? null;
+
   const [ready, setReady] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [customHabits, setCustomHabits] = useState<CustomHabits>({ daily: [], subscription: [] });
   const [dailyLogs, setDailyLogs] = useState<DailyLogs>({});
   const [myLoan, setMyLoan] = useState<MyLoan | null>(null);
 
+  // Load + (first time) migrate whenever the signed-in user changes.
   useEffect(() => {
-    (async () => {
-      try {
-        const [txRaw, chRaw, dlRaw, mlRaw] = await Promise.all([
-          AsyncStorage.getItem(STORAGE_KEY),
-          AsyncStorage.getItem(CUSTOM_HABITS_KEY),
-          AsyncStorage.getItem(DAILY_LOG_KEY),
-          AsyncStorage.getItem(MYLOAN_KEY),
-        ]);
-        if (txRaw) setTransactions(JSON.parse(txRaw));
-        if (chRaw) {
-          const parsed = JSON.parse(chRaw);
-          if (parsed && parsed.daily && parsed.subscription) setCustomHabits(parsed);
-        }
-        if (dlRaw) setDailyLogs(JSON.parse(dlRaw));
-        if (mlRaw) setMyLoan(JSON.parse(mlRaw));
-      } catch (e) {
-        // best-effort load
-      }
-      setReady(true);
-    })();
-  }, []);
+    if (!userId) {
+      setTransactions([]);
+      setCustomHabits({ daily: [], subscription: [] });
+      setDailyLogs({});
+      setMyLoan(null);
+      setReady(false);
+      return;
+    }
 
-  const persistTx = useCallback((next: Transaction[]) => {
-    setTransactions(next);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-  }, []);
+    let cancelled = false;
+
+    (async () => {
+      setReady(false);
+      try {
+        const alreadyMigrated = await AsyncStorage.getItem(migratedFlagKey(userId));
+        if (!alreadyMigrated) {
+          await migrateLegacyLocalData(userId);
+          await AsyncStorage.setItem(migratedFlagKey(userId), 'true');
+        }
+
+        const [{ data: txRows }, { data: chRows }, { data: dlRows }, { data: mlRows }] = await Promise.all([
+          supabase.from('keepit_transactions').select('*').order('date', { ascending: false }),
+          supabase.from('keepit_custom_habits').select('*'),
+          supabase.from('keepit_daily_logs').select('*'),
+          supabase.from('keepit_myloan').select('*').maybeSingle(),
+        ]);
+
+        if (cancelled) return;
+
+        const nextTx = (txRows ?? []).map(txFromRow);
+        const nextCh: CustomHabits = { daily: [], subscription: [] };
+        (chRows ?? []).forEach((r: any) => {
+          const habit: CustomHabit = { key: r.key, label: r.label, now: Number(r.now_amount), then: Number(r.then_amount) };
+          (nextCh[r.mode as HabitMode] as CustomHabit[]).push(habit);
+        });
+        const nextDl: DailyLogs = {};
+        (dlRows ?? []).forEach((r: any) => {
+          if (!nextDl[r.date_key]) nextDl[r.date_key] = {};
+          nextDl[r.date_key][r.track_key] = !!r.tracked;
+        });
+        const nextMl: MyLoan | null = mlRows ? { balance: Number(mlRows.balance), rate: Number(mlRows.rate), term: Number(mlRows.term) } : null;
+
+        setTransactions(nextTx);
+        setCustomHabits(nextCh);
+        setDailyLogs(nextDl);
+        setMyLoan(nextMl);
+
+        await Promise.all([
+          AsyncStorage.setItem(scopedKey(LEGACY_TX_KEY, userId), JSON.stringify(nextTx)),
+          AsyncStorage.setItem(scopedKey(LEGACY_CH_KEY, userId), JSON.stringify(nextCh)),
+          AsyncStorage.setItem(scopedKey(LEGACY_DL_KEY, userId), JSON.stringify(nextDl)),
+          nextMl
+            ? AsyncStorage.setItem(scopedKey(LEGACY_ML_KEY, userId), JSON.stringify(nextMl))
+            : AsyncStorage.removeItem(scopedKey(LEGACY_ML_KEY, userId)),
+        ]);
+      } catch (e) {
+        // Cloud fetch failed (offline, etc) — fall back to this device's last synced cache.
+        try {
+          const [txRaw, chRaw, dlRaw, mlRaw] = await Promise.all([
+            AsyncStorage.getItem(scopedKey(LEGACY_TX_KEY, userId)),
+            AsyncStorage.getItem(scopedKey(LEGACY_CH_KEY, userId)),
+            AsyncStorage.getItem(scopedKey(LEGACY_DL_KEY, userId)),
+            AsyncStorage.getItem(scopedKey(LEGACY_ML_KEY, userId)),
+          ]);
+          if (!cancelled) {
+            if (txRaw) setTransactions(JSON.parse(txRaw));
+            if (chRaw) setCustomHabits(JSON.parse(chRaw));
+            if (dlRaw) setDailyLogs(JSON.parse(dlRaw));
+            if (mlRaw) setMyLoan(JSON.parse(mlRaw));
+          }
+        } catch {
+          // best effort
+        }
+      }
+      if (!cancelled) setReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const cacheTx = useCallback(
+    (next: Transaction[]) => {
+      if (userId) AsyncStorage.setItem(scopedKey(LEGACY_TX_KEY, userId), JSON.stringify(next)).catch(() => {});
+    },
+    [userId]
+  );
 
   const addTransaction = useCallback(
     (tx: Transaction) => {
-      persistTx([tx, ...transactions]);
+      const next = [tx, ...transactions];
+      setTransactions(next);
+      cacheTx(next);
+      if (userId) {
+        supabase
+          .from('keepit_transactions')
+          .insert({
+            id: tx.id,
+            user_id: userId,
+            name: tx.name,
+            amount: tx.amount,
+            category: tx.category,
+            recurring: tx.recurring,
+            frequency: tx.frequency,
+            type: tx.type,
+            date: tx.date,
+            habit_track_key: tx.habitTrackKey ?? null,
+            habit_saving: tx.habitSaving ?? null,
+          })
+          .then(() => {});
+      }
     },
-    [transactions, persistTx]
+    [transactions, cacheTx, userId]
   );
 
   const deleteTransaction = useCallback(
     (id: number) => {
-      persistTx(transactions.filter((t) => t.id !== id));
+      const next = transactions.filter((t) => t.id !== id);
+      setTransactions(next);
+      cacheTx(next);
+      if (userId) {
+        supabase.from('keepit_transactions').delete().eq('user_id', userId).eq('id', id).then(() => {});
+      }
     },
-    [transactions, persistTx]
+    [transactions, cacheTx, userId]
   );
 
   const addCustomHabit = useCallback(
     (mode: HabitMode, habit: { key: string; label: string; now: number; then: number }) => {
       const next: CustomHabits = { ...customHabits, [mode]: [...customHabits[mode], habit] };
       setCustomHabits(next);
-      AsyncStorage.setItem(CUSTOM_HABITS_KEY, JSON.stringify(next)).catch(() => {});
+      if (userId) {
+        AsyncStorage.setItem(scopedKey(LEGACY_CH_KEY, userId), JSON.stringify(next)).catch(() => {});
+        supabase
+          .from('keepit_custom_habits')
+          .insert({ user_id: userId, mode, key: habit.key, label: habit.label, now_amount: habit.now, then_amount: habit.then })
+          .then(() => {});
+      }
     },
-    [customHabits]
+    [customHabits, userId]
   );
 
   const toggleDayHabit = useCallback(
     (dateKey: string, trackKey: string) => {
       const day = { ...(dailyLogs[dateKey] || {}) };
-      day[trackKey] = !day[trackKey];
+      const willBeTracked = !day[trackKey];
+      day[trackKey] = willBeTracked;
       const next = { ...dailyLogs };
       if (!Object.values(day).some(Boolean)) {
         delete next[dateKey];
@@ -99,20 +224,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         next[dateKey] = day;
       }
       setDailyLogs(next);
-      AsyncStorage.setItem(DAILY_LOG_KEY, JSON.stringify(next)).catch(() => {});
+      if (userId) {
+        AsyncStorage.setItem(scopedKey(LEGACY_DL_KEY, userId), JSON.stringify(next)).catch(() => {});
+        if (willBeTracked) {
+          supabase
+            .from('keepit_daily_logs')
+            .upsert({ user_id: userId, date_key: dateKey, track_key: trackKey, tracked: true, updated_at: new Date().toISOString() })
+            .then(() => {});
+        } else {
+          supabase.from('keepit_daily_logs').delete().eq('user_id', userId).eq('date_key', dateKey).eq('track_key', trackKey).then(() => {});
+        }
+      }
     },
-    [dailyLogs]
+    [dailyLogs, userId]
   );
 
-  const saveMyLoanFn = useCallback((loan: MyLoan) => {
-    setMyLoan(loan);
-    AsyncStorage.setItem(MYLOAN_KEY, JSON.stringify(loan)).catch(() => {});
-  }, []);
+  const saveMyLoanFn = useCallback(
+    (loan: MyLoan) => {
+      setMyLoan(loan);
+      if (userId) {
+        AsyncStorage.setItem(scopedKey(LEGACY_ML_KEY, userId), JSON.stringify(loan)).catch(() => {});
+        supabase
+          .from('keepit_myloan')
+          .upsert({ user_id: userId, balance: loan.balance, rate: loan.rate, term: loan.term, updated_at: new Date().toISOString() })
+          .then(() => {});
+      }
+    },
+    [userId]
+  );
 
   const removeMyLoan = useCallback(() => {
     setMyLoan(null);
-    AsyncStorage.removeItem(MYLOAN_KEY).catch(() => {});
-  }, []);
+    if (userId) {
+      AsyncStorage.removeItem(scopedKey(LEGACY_ML_KEY, userId)).catch(() => {});
+      supabase.from('keepit_myloan').delete().eq('user_id', userId).then(() => {});
+    }
+  }, [userId]);
 
   const habitTrackKey = useCallback(habitTrackKeyFn, []);
 
@@ -142,9 +289,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         habitTrackKey: habitTrackKeyFn(key, mode, label),
         habitSaving: monthlySaving,
       };
-      persistTx([tx, ...transactions]);
+      addTransaction(tx);
     },
-    [transactions, persistTx, isHabitTracked]
+    [addTransaction, isHabitTracked]
   );
 
   const value = useMemo<Store>(
@@ -183,6 +330,78 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+}
+
+// One-time, per-device: push whatever was saved locally before accounts existed
+// up to this user's brand-new cloud account, so nothing from testing gets lost.
+async function migrateLegacyLocalData(userId: string) {
+  try {
+    const [txRaw, chRaw, dlRaw, mlRaw] = await Promise.all([
+      AsyncStorage.getItem(LEGACY_TX_KEY),
+      AsyncStorage.getItem(LEGACY_CH_KEY),
+      AsyncStorage.getItem(LEGACY_DL_KEY),
+      AsyncStorage.getItem(LEGACY_ML_KEY),
+    ]);
+
+    if (txRaw) {
+      const txs: Transaction[] = JSON.parse(txRaw);
+      if (txs.length) {
+        await supabase.from('keepit_transactions').upsert(
+          txs.map((t) => ({
+            id: t.id,
+            user_id: userId,
+            name: t.name,
+            amount: t.amount,
+            category: t.category,
+            recurring: t.recurring,
+            frequency: t.frequency,
+            type: t.type,
+            date: t.date,
+            habit_track_key: t.habitTrackKey ?? null,
+            habit_saving: t.habitSaving ?? null,
+          }))
+        );
+      }
+    }
+
+    if (chRaw) {
+      const ch: CustomHabits = JSON.parse(chRaw);
+      const rows: any[] = [];
+      (['daily', 'subscription'] as HabitMode[]).forEach((mode) => {
+        (ch[mode] || []).forEach((h) => {
+          rows.push({ user_id: userId, mode, key: h.key, label: h.label, now_amount: h.now, then_amount: h.then });
+        });
+      });
+      if (rows.length) await supabase.from('keepit_custom_habits').insert(rows);
+    }
+
+    if (dlRaw) {
+      const dl: DailyLogs = JSON.parse(dlRaw);
+      const rows: any[] = [];
+      Object.entries(dl).forEach(([dateKey, tracks]) => {
+        Object.entries(tracks).forEach(([trackKey, tracked]) => {
+          if (tracked) rows.push({ user_id: userId, date_key: dateKey, track_key: trackKey, tracked: true });
+        });
+      });
+      if (rows.length) await supabase.from('keepit_daily_logs').upsert(rows);
+    }
+
+    if (mlRaw) {
+      const ml: MyLoan = JSON.parse(mlRaw);
+      await supabase.from('keepit_myloan').upsert({ user_id: userId, balance: ml.balance, rate: ml.rate, term: ml.term });
+    }
+
+    // Clear the legacy unscoped keys so a second account on the same device
+    // never re-migrates the first account's data.
+    await Promise.all([
+      AsyncStorage.removeItem(LEGACY_TX_KEY),
+      AsyncStorage.removeItem(LEGACY_CH_KEY),
+      AsyncStorage.removeItem(LEGACY_DL_KEY),
+      AsyncStorage.removeItem(LEGACY_ML_KEY),
+    ]);
+  } catch (e) {
+    // If migration fails, leave the legacy keys in place so we can retry next launch.
+  }
 }
 
 export function useStore(): Store {
