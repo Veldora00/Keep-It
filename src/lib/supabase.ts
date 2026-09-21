@@ -1,4 +1,5 @@
 import 'react-native-url-polyfill/auto';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
@@ -18,4 +19,10 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // Deep link target the app registers for magic-link / password-reset callbacks.
-export const AUTH_REDIRECT_URL = 'keepit://auth/callback';
+// On native this is the app's own custom scheme. On web there's no scheme to
+// deep-link into — the browser tab IS the app — so the redirect has to be
+// back to whatever origin this build is actually running on, otherwise
+// Supabase falls back to the project's default Site URL (which, since this
+// Supabase project is shared with Talaks, is Talaks' own domain).
+export const AUTH_REDIRECT_URL =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? `${window.location.origin}/` : 'keepit://auth/callback';

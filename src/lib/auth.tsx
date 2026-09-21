@@ -6,9 +6,16 @@ import { AUTH_REDIRECT_URL, supabase } from './supabase';
 interface AuthValue {
   session: Session | null;
   initializing: boolean;
+  // True while the user is here via a "reset your password" email link —
+  // Supabase hands them a temporary session just for setting a new password,
+  // so the app should show that screen instead of the normal app.
+  passwordRecovery: boolean;
   signUpWithPassword: (email: string, password: string) => Promise<string | null>;
   signInWithPassword: (email: string, password: string) => Promise<string | null>;
   sendMagicLink: (email: string) => Promise<string | null>;
+  sendPasswordReset: (email: string) => Promise<string | null>;
+  updatePassword: (newPassword: string) => Promise<string | null>;
+  cancelPasswordRecovery: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -38,6 +45,7 @@ async function handleAuthUrl(url: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const handledInitialUrl = useRef(false);
 
   useEffect(() => {
@@ -46,8 +54,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setInitializing(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       setSession(sess);
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
     });
 
     if (!handledInitialUrl.current) {
@@ -70,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthValue = {
     session,
     initializing,
+    passwordRecovery,
     signUpWithPassword: async (email, password) => {
       const { error } = await supabase.auth.signUp({
         email,
@@ -88,6 +98,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: { emailRedirectTo: AUTH_REDIRECT_URL },
       });
       return error ? error.message : null;
+    },
+    sendPasswordReset: async (email) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: AUTH_REDIRECT_URL,
+      });
+      return error ? error.message : null;
+    },
+    updatePassword: async (newPassword) => {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (!error) setPasswordRecovery(false);
+      return error ? error.message : null;
+    },
+    cancelPasswordRecovery: () => {
+      setPasswordRecovery(false);
+      supabase.auth.signOut();
     },
     signOut: async () => {
       await supabase.auth.signOut();

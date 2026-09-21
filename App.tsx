@@ -12,6 +12,7 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { StoreProvider } from './src/lib/store';
 import { AuthProvider, useAuth } from './src/lib/auth';
 import AuthScreen from './src/screens/AuthScreen';
+import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import DailyCheckIn from './src/components/DailyCheckIn';
 import { colors } from './src/theme/theme';
 import HomeScreen from './src/screens/HomeScreen';
@@ -64,7 +65,7 @@ export default function App() {
 }
 
 function AppGate() {
-  const { session, initializing } = useAuth();
+  const { session, initializing, passwordRecovery } = useAuth();
 
   if (initializing) {
     return (
@@ -72,6 +73,12 @@ function AppGate() {
         <ActivityIndicator color={colors.accent} />
       </View>
     );
+  }
+
+  // A recovery-link session is only for setting a new password — don't drop
+  // the user straight into the app with it.
+  if (passwordRecovery) {
+    return <ResetPasswordScreen />;
   }
 
   if (!session) {

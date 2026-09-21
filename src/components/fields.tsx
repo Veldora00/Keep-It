@@ -8,12 +8,16 @@ export function Field({
   onChangeText,
   placeholder,
   keyboardType = 'decimal-pad',
+  secureTextEntry,
+  autoCapitalize,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   keyboardType?: 'decimal-pad' | 'default';
+  secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }) {
   return (
     <View style={styles.field}>
@@ -25,6 +29,8 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.inkFaint}
         keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={autoCapitalize}
       />
     </View>
   );

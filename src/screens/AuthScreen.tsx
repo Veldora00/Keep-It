@@ -8,13 +8,15 @@ import { useAuth } from '../lib/auth';
 type Mode = 'password' | 'magic';
 
 export default function AuthScreen() {
-  const { signUpWithPassword, signInWithPassword, sendMagicLink } = useAuth();
+  const { signUpWithPassword, signInWithPassword, sendMagicLink, sendPasswordReset } = useAuth();
   const [mode, setMode] = useState<Mode>('password');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   async function submitPassword() {
     if (!email.trim() || !password) {
@@ -31,6 +33,21 @@ export default function AuthScreen() {
     } else if (isSignUp) {
       Alert.alert('Check your email', 'Confirm your email to finish signing up, then sign in.');
       setIsSignUp(false);
+    }
+  }
+
+  async function submitForgotPassword() {
+    if (!email.trim()) {
+      Alert.alert('Enter your email first');
+      return;
+    }
+    setBusy(true);
+    const err = await sendPasswordReset(email.trim());
+    setBusy(false);
+    if (err) {
+      Alert.alert("Couldn't send reset link", err);
+    } else {
+      setResetSent(true);
     }
   }
 
@@ -65,16 +82,59 @@ export default function AuthScreen() {
           }}
         />
 
-        <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="default" />
+        <Field
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+          keyboardType="default"
+          autoCapitalize="none"
+        />
 
-        {mode === 'password' ? (
+        {mode === 'password' && forgotOpen ? (
           <>
-            <Field label="Password" value={password} onChangeText={setPassword} placeholder="••••••••" keyboardType="default" />
+            {resetSent ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>
+                  If an account exists for {email.trim()}, a password reset link is on its way — open it on this device to set a new password.
+                </Text>
+              </View>
+            ) : busy ? (
+              <ActivityIndicator color={colors.accent} style={{ marginVertical: 10 }} />
+            ) : (
+              <PrimaryButton title="Send reset link" onPress={submitForgotPassword} />
+            )}
+            <Text
+              style={styles.switchLine}
+              onPress={() => {
+                setForgotOpen(false);
+                setResetSent(false);
+              }}
+            >
+              Back to sign in
+            </Text>
+          </>
+        ) : mode === 'password' ? (
+          <>
+            <Field
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              keyboardType="default"
+              secureTextEntry
+              autoCapitalize="none"
+            />
             {busy ? (
               <ActivityIndicator color={colors.accent} style={{ marginVertical: 10 }} />
             ) : (
               <PrimaryButton title={isSignUp ? 'Create account' : 'Sign in'} onPress={submitPassword} />
             )}
+            {!isSignUp ? (
+              <Text style={styles.forgotLine} onPress={() => setForgotOpen(true)}>
+                Forgot password?
+              </Text>
+            ) : null}
             <Text style={styles.switchLine} onPress={() => setIsSignUp((v) => !v)}>
               {isSignUp ? 'Already have an account? Sign in' : "New here? Create an account"}
             </Text>
@@ -104,6 +164,7 @@ const styles = StyleSheet.create({
   brand: { fontFamily: fonts.serif, fontSize: 32, color: colors.ink, textAlign: 'center', marginBottom: 8 },
   tagline: { fontSize: 14, color: colors.inkDim, textAlign: 'center', marginBottom: 28, lineHeight: 20 },
   switchLine: { textAlign: 'center', color: colors.accentDeep, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 13.5, marginTop: 16 },
+  forgotLine: { textAlign: 'center', color: colors.inkFaint, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 13, marginTop: 14 },
   notice: { backgroundColor: colors.mint, borderWidth: 1, borderColor: colors.line, borderRadius: radii.md, padding: 16, marginTop: 4 },
   noticeText: { fontSize: 13.5, color: colors.accentDeep, lineHeight: 19 },
 });
