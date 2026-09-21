@@ -19,16 +19,26 @@ export function formatTerm(years: number, short?: boolean): string {
 }
 
 export const FREQUENCY_LABELS: Record<string, string> = {
+  daily: 'Daily',
   weekly: 'Weekly',
   fortnightly: 'Fortnightly',
   monthly: 'Monthly',
   annually: 'Annually',
 };
 export const FREQUENCY_PER_YEAR: Record<string, number> = {
+  daily: 365,
   weekly: 52,
   fortnightly: 26,
   monthly: 12,
   annually: 1,
+};
+// The noun to slot into "per ___" labels next to a habit/subscription cost field.
+export const FREQUENCY_NOUN: Record<string, string> = {
+  daily: 'day',
+  weekly: 'week',
+  fortnightly: 'fortnight',
+  monthly: 'month',
+  annually: 'year',
 };
 export function monthlyEquivalent(amount: number, frequency: string | null | undefined): number {
   return (amount * (FREQUENCY_PER_YEAR[frequency || 'monthly'] || 12)) / 12;

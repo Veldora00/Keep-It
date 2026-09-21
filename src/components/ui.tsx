@@ -1,8 +1,77 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { colors, fonts, gradients, radii } from '../theme/theme';
 import { money } from '../lib/calculations';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+// The simplest possible "line, going somewhere" chart: a handful of
+// checkpoints, drawn in with a left-to-right animation instead of just
+// appearing. No axes, no gridlines — just the shape of the trend.
+export function AnimatedLineChart({
+  points,
+  width = 260,
+  height = 110,
+  color = colors.accentDeep,
+  duration = 900,
+}: {
+  points: { label: string; value: number }[];
+  width?: number;
+  height?: number;
+  color?: string;
+  duration?: number;
+}) {
+  const padding = 16;
+  const values = points.map((p) => p.value);
+  const maxV = Math.max(...values, 0.01);
+  const minV = Math.min(0, ...values);
+  const span = maxV - minV || 1;
+  const stepX = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+  const coords = points.map((p, i) => {
+    const x = padding + i * stepX;
+    const y = height - padding - ((p.value - minV) / span) * (height - padding * 2);
+    return [x, y] as const;
+  });
+  const d = coords.map(([x, y], i) => (i === 0 ? `M${x},${y}` : `L${x},${y}`)).join(' ');
+  const totalLen = coords.reduce((acc, [x, y], i) => (i === 0 ? 0 : acc + Math.hypot(x - coords[i - 1][0], y - coords[i - 1][1])), 0) || 1;
+
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    progress.setValue(0);
+    Animated.timing(progress, { toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d]);
+  const dashOffset = progress.interpolate({ inputRange: [0, 1], outputRange: [totalLen, 0] });
+
+  return (
+    <View>
+      <Svg width={width} height={height}>
+        <AnimatedPath
+          d={d}
+          stroke={color}
+          strokeWidth={2.5}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={`${totalLen},${totalLen}`}
+          strokeDashoffset={dashOffset}
+        />
+        {coords.map(([x, y], i) => (
+          <Circle key={i} cx={x} cy={y} r={3.5} fill={color} />
+        ))}
+      </Svg>
+      <View style={styles.chartLabelRow}>
+        {points.map((p, i) => (
+          <Text key={i} style={styles.chartLabel}>
+            {p.label}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 // Counts up from 0 (or from `from`) to `value`, formatted as money, so a
 // reward number lands with some weight instead of just appearing static.
@@ -274,4 +343,6 @@ const styles = StyleSheet.create({
   btnPrimaryText: { color: '#fff', fontSize: 15, fontFamily: fonts.sansSemiBold, fontWeight: '600' },
   notice: { backgroundColor: '#FFF8E8', borderWidth: 1, borderColor: '#F0DFAE', borderRadius: 12, padding: 14, marginTop: 18 },
   noticeText: { fontSize: 12.5, color: '#7A5A00', lineHeight: 18 },
+  chartLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  chartLabel: { fontSize: 11, color: colors.inkFaint, fontFamily: fonts.sans },
 });

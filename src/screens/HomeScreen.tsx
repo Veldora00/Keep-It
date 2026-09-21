@@ -2,13 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fonts, radii, categoryColors } from '../theme/theme';
 import { Card, Chip, EmptyState, HeroResult, PrimaryButton, SectionLabel, SectionLabelRow, PageTitle } from '../components/ui';
-import { CheckRow, Field, FieldGrid } from '../components/fields';
+import { CheckRow, Field } from '../components/fields';
 import AddTransactionSheet from '../components/AddTransactionSheet';
 import LoanSheet from '../components/LoanSheet';
 import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
-import { computeExtraImpact, formatTerm, money } from '../lib/calculations';
+import { computeExtraImpact, formatTerm, money, monthlyEquivalent, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
 import { HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, SUBSCRIPTIONS } from '../lib/types';
+
+type HabitFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly';
+const FREQUENCY_OPTIONS: HabitFrequency[] = ['daily', 'weekly', 'fortnightly', 'monthly'];
 
 function getPreset(mode: HabitMode, key: string, customHabits: { daily: any[]; subscription: any[] }) {
   const presets = mode === 'daily' ? HABITS : SUBSCRIPTIONS;
@@ -33,11 +36,17 @@ export default function HomeScreen() {
   const initial = getPreset('daily', 'coffee', customHabits);
   const [nowStr, setNowStr] = useState(String(initial.now));
   const [thenStr, setThenStr] = useState(String(initial.then));
+  const [frequency, setFrequency] = useState<HabitFrequency>('daily');
+  const [cutChoice, setCutChoice] = useState<'20' | '40' | 'custom' | null>(null);
+  const [cutCustomOpen, setCutCustomOpen] = useState(false);
 
   function selectHabit(mode: HabitMode, key: string) {
     setHabitModeState(mode);
     setSelectedHabitKey(key);
     setHabitNone(false);
+    setFrequency(mode === 'daily' ? 'daily' : 'monthly');
+    setCutChoice(null);
+    setCutCustomOpen(false);
     const preset = getPreset(mode, key, customHabits);
     setNowStr(String(preset.now));
     setThenStr(String(preset.then));
@@ -55,6 +64,12 @@ export default function HomeScreen() {
       setNowStr(String(preset.now));
       setThenStr(String(preset.then));
     }
+  }
+
+  function applyCut(pct: number, choice: '20' | '40') {
+    setThenStr(String(Math.max(0, Math.round(now * (1 - pct)))));
+    setCutChoice(choice);
+    setCutCustomOpen(false);
   }
 
   function currentHabitLabel(): string {
@@ -81,7 +96,8 @@ export default function HomeScreen() {
   const now = parseFloat(nowStr) || 0;
   const then = parseFloat(thenStr) || 0;
   const saving = Math.max(0, now - then);
-  const monthlySaving = habitMode === 'daily' ? saving * 30 : saving;
+  const monthlySaving = monthlyEquivalent(saving, frequency);
+  const freqNoun = FREQUENCY_NOUN[frequency];
   const label = currentHabitLabel();
   const tracked = store.isHabitTracked(selectedHabitKey, habitMode, label);
 
@@ -130,7 +146,8 @@ export default function HomeScreen() {
     if (habitNone) return;
     if (now - then <= 0) return;
     if (tracked) return;
-    store.trackHabit({ key: selectedHabitKey, mode: habitMode, label, now, then });
+    const monthlySpend = monthlyEquivalent(then, frequency);
+    store.trackHabit({ key: selectedHabitKey, mode: habitMode, label, monthlySpend, monthlySaving });
     setTrackedImpact({
       label,
       monthlySaving,
@@ -214,18 +231,60 @@ export default function HomeScreen() {
 
           <CheckRow label="I don't do this" checked={habitNone} onToggle={toggleHabitNone} />
 
-          <FieldGrid>
-            <Field
-              label={habitMode === 'daily' ? 'You spend now (per day)' : 'Your current plan (per month)'}
-              value={nowStr}
-              onChangeText={setNowStr}
-            />
-            <Field
-              label={habitMode === 'daily' ? 'Try spending (per day)' : 'Downgrade to, or cancel (per month)'}
-              value={thenStr}
-              onChangeText={setThenStr}
-            />
-          </FieldGrid>
+          <View style={styles.freqRow}>
+            {FREQUENCY_OPTIONS.map((f) => (
+              <Chip key={f} label={FREQUENCY_LABELS[f]} active={frequency === f} onPress={() => setFrequency(f)} />
+            ))}
+          </View>
+
+          <Field
+            label={habitMode === 'daily' ? `You spend now (per ${freqNoun})` : `Your current plan (per ${freqNoun})`}
+            value={nowStr}
+            onChangeText={(v) => {
+              setNowStr(v);
+              setCutChoice(null);
+            }}
+          />
+
+          <Text style={styles.cutLabel}>
+            {habitMode === 'daily' ? `Try spending (per ${freqNoun})` : `Downgrade to, or cancel (per ${freqNoun})`}
+          </Text>
+          <View style={styles.cutRow}>
+            <Pressable
+              style={[styles.cutBtn, cutChoice === '20' && styles.cutBtnActive]}
+              onPress={() => applyCut(0.2, '20')}
+            >
+              <Text style={[styles.cutBtnText, cutChoice === '20' && styles.cutBtnTextActive]}>20% less</Text>
+              <Text style={[styles.cutBtnAmt, cutChoice === '20' && styles.cutBtnTextActive]}>{money(now * 0.8)}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.cutBtn, cutChoice === '40' && styles.cutBtnActive]}
+              onPress={() => applyCut(0.4, '40')}
+            >
+              <Text style={[styles.cutBtnText, cutChoice === '40' && styles.cutBtnTextActive]}>40% less</Text>
+              <Text style={[styles.cutBtnAmt, cutChoice === '40' && styles.cutBtnTextActive]}>{money(now * 0.6)}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.cutBtn, cutChoice === 'custom' && styles.cutBtnActive]}
+              onPress={() => {
+                setCutChoice('custom');
+                setCutCustomOpen(true);
+              }}
+            >
+              <Text style={[styles.cutBtnText, cutChoice === 'custom' && styles.cutBtnTextActive]}>Custom</Text>
+              <Text style={[styles.cutBtnAmt, cutChoice === 'custom' && styles.cutBtnTextActive]}>Your number</Text>
+            </Pressable>
+          </View>
+
+          {cutCustomOpen ? (
+            <Field label={`Your number (per ${freqNoun})`} value={thenStr} onChangeText={setThenStr} />
+          ) : (
+            <Text style={styles.cutPreview}>
+              {saving > 0
+                ? `That's ${money(then)} per ${freqNoun} — a saving of ${money(saving)} per ${freqNoun}.`
+                : `Pick a lower amount above to see your saving.`}
+            </Text>
+          )}
 
           <PrimaryButton
             title={selectedHabitKey === 'other' && customName.trim() ? 'Save this custom habit, then track it' : trackBtnLabel}
@@ -360,6 +419,24 @@ const styles = StyleSheet.create({
   habitModeText: { fontSize: 14, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
   habitModeExpenseActiveText: { color: colors.red },
   habitModeIncomeActiveText: { color: colors.accentDeep },
+  freqRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 14 },
+  cutLabel: { fontSize: 12.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim, marginBottom: 8, marginTop: 2 },
+  cutRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  cutBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    borderRadius: radii.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    backgroundColor: colors.paperWarm,
+  },
+  cutBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  cutBtnText: { fontSize: 12.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
+  cutBtnAmt: { fontSize: 13.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.ink, marginTop: 2 },
+  cutBtnTextActive: { color: '#fff' },
+  cutPreview: { fontSize: 12.5, color: colors.inkFaint, marginBottom: 14, lineHeight: 17 },
   loanCard: {
     backgroundColor: colors.paper,
     borderWidth: 1,

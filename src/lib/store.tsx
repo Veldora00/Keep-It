@@ -35,7 +35,7 @@ interface Store {
   removeMyLoan: () => void;
   habitTrackKey: (key: string, mode: HabitMode, label: string) => string;
   isHabitTracked: (key: string, mode: HabitMode, label: string) => boolean;
-  trackHabit: (opts: { key: string; mode: HabitMode; label: string; now: number; then: number }) => void;
+  trackHabit: (opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -297,11 +297,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const trackHabit = useCallback(
-    (opts: { key: string; mode: HabitMode; label: string; now: number; then: number }) => {
-      const { key, mode, label, now, then } = opts;
+    (opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => {
+      const { key, mode, label, monthlySpend, monthlySaving } = opts;
       if (isHabitTracked(key, mode, label)) return;
-      const monthlySaving = mode === 'daily' ? (now - then) * 30 : now - then;
-      const monthlySpend = mode === 'daily' ? then * 30 : then;
       const trackKey = habitTrackKeyFn(key, mode, label);
       const tx: Transaction = {
         id: Date.now(),
