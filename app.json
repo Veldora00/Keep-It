@@ -31,6 +31,12 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
+    "owner": "veldora1s-team",
+    "extra": {
+      "eas": {
+        "projectId": "89f66211-4d88-49f9-95aa-b1d213375e38"
+      }
+    },
     "plugins": [
       [
         "expo-splash-screen",
