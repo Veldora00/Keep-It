@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
 import { CustomHabit, CustomHabits, DailyLogs, HabitMode, MyLoan, Transaction } from './types';
+import { todayKey } from './calculations';
 
 // Legacy unscoped keys — this is where data lived before accounts existed.
 // Read once per device, on the very first login, then migrated to the cloud and cleared.
@@ -301,6 +302,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (isHabitTracked(key, mode, label)) return;
       const monthlySaving = mode === 'daily' ? (now - then) * 30 : now - then;
       const monthlySpend = mode === 'daily' ? then * 30 : then;
+      const trackKey = habitTrackKeyFn(key, mode, label);
       const tx: Transaction = {
         id: Date.now(),
         name: `${label} (${monthlySpend > 0 ? 'new plan' : 'cancelled'})`,
@@ -310,12 +312,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         frequency: 'monthly',
         type: 'expense',
         date: new Date().toISOString(),
-        habitTrackKey: habitTrackKeyFn(key, mode, label),
+        habitTrackKey: trackKey,
         habitSaving: monthlySaving,
       };
       addTransaction(tx);
+
+      // Committing to a daily habit right now already covers today — mark today
+      // done immediately so the "did you keep to it?" check-in only starts
+      // asking from tomorrow, instead of firing the instant it's tracked.
+      if (mode === 'daily') {
+        const today = todayKey();
+        const day = { ...(dailyLogs[today] || {}), [trackKey]: true };
+        const next = { ...dailyLogs, [today]: day };
+        setDailyLogs(next);
+        if (userId) {
+          AsyncStorage.setItem(scopedKey(LEGACY_DL_KEY, userId), JSON.stringify(next)).catch(() => {});
+          supabase
+            .from('keepit_daily_logs')
+            .upsert({ user_id: userId, date_key: today, track_key: trackKey, tracked: true, updated_at: new Date().toISOString() })
+            .then(() => {});
+        }
+      }
     },
-    [addTransaction, isHabitTracked]
+    [addTransaction, isHabitTracked, dailyLogs, userId]
   );
 
   const value = useMemo<Store>(

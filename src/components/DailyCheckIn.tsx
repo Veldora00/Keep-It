@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fonts, radii } from '../theme/theme';
-import { Card, HeroMini, PrimaryButton } from './ui';
+import { Card, HeroMini, PopIn, PrimaryButton } from './ui';
 import { useStore } from '../lib/store';
 import { computeExtraImpact, computeStreak, earnedTrophies, money, todayKey, TROPHY_MILESTONES } from '../lib/calculations';
 
@@ -96,22 +96,28 @@ export default function DailyCheckIn() {
 
           {stage === 'reward' && (
             <>
-              <Text style={styles.icon}>🔥</Text>
+              <PopIn style={styles.iconWrap}>
+                <Text style={styles.icon}>🔥</Text>
+              </PopIn>
               <Text style={styles.title}>{revealStreak}-day streak</Text>
               <Text style={styles.subtitle}>Nice work sticking to it today.</Text>
               <View style={styles.row}>
-                <HeroMini variant="g-green" label="Saved today" amount={money(dailySaving)} style={styles.heroFlex} />
+                <HeroMini variant="g-green" label="Saved today" amount={money(dailySaving)} animateValue={dailySaving} style={styles.heroFlex} />
                 <HeroMini
                   variant="g-blue"
                   label={impact && impact.interestSaved > 0 ? 'Interest saved' : 'At this pace / mo'}
                   amount={impact && impact.interestSaved > 0 ? money(impact.interestSaved) : money(monthPace)}
+                  animateValue={impact && impact.interestSaved > 0 ? impact.interestSaved : monthPace}
+                  animateDelay={120}
                   style={styles.heroFlex}
                 />
               </View>
               {revealTrophy ? (
-                <Card style={styles.trophyCard}>
-                  <Text style={styles.trophyText}>New trophy unlocked: {revealTrophy}</Text>
-                </Card>
+                <PopIn delay={400} style={styles.trophyCardWrap}>
+                  <Card style={styles.trophyCard}>
+                    <Text style={styles.trophyText}>New trophy unlocked: {revealTrophy}</Text>
+                  </Card>
+                </PopIn>
               ) : null}
               <PrimaryButton title="Keep going" onPress={close} />
             </>
@@ -145,7 +151,9 @@ export default function DailyCheckIn() {
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(22,26,32,0.55)', justifyContent: 'center', padding: 22 },
   sheet: { backgroundColor: colors.paper, borderRadius: radii.xl, padding: 22, alignItems: 'center' },
-  icon: { fontSize: 34, marginBottom: 10 },
+  icon: { fontSize: 34 },
+  iconWrap: { marginBottom: 10 },
+  trophyCardWrap: { width: '100%' },
   title: { fontFamily: fonts.serif, fontSize: 19, color: colors.ink, textAlign: 'center', marginBottom: 6 },
   subtitle: { fontSize: 13, color: colors.inkDim, textAlign: 'center', marginBottom: 16, lineHeight: 18 },
   row: { flexDirection: 'row', gap: 12, width: '100%', marginTop: 8 },

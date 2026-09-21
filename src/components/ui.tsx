@@ -1,7 +1,55 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts, gradients, radii } from '../theme/theme';
+import { money } from '../lib/calculations';
+
+// Counts up from 0 (or from `from`) to `value`, formatted as money, so a
+// reward number lands with some weight instead of just appearing static.
+export function AnimatedAmount({
+  value,
+  from = 0,
+  duration = 800,
+  style,
+}: {
+  value: number;
+  from?: number;
+  duration?: number;
+  style?: TextStyle | TextStyle[];
+}) {
+  const anim = useRef(new Animated.Value(from)).current;
+  const [display, setDisplay] = useState(money(from));
+
+  useEffect(() => {
+    anim.setValue(from);
+    const id = anim.addListener(({ value: v }) => setDisplay(money(v)));
+    Animated.timing(anim, {
+      toValue: value,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+    return () => anim.removeListener(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return <Text style={style}>{display}</Text>;
+}
+
+// Wraps a reveal moment (a checkmark, a trophy, an icon) in a quick spring
+// pop-in instead of it just being there when the modal mounts.
+export function PopIn({ children, style, delay = 0 }: { children: React.ReactNode; style?: ViewStyle; delay?: number }) {
+  const scale = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    scale.setValue(0);
+    Animated.sequence([
+      Animated.delay(delay),
+      Animated.spring(scale, { toValue: 1, friction: 4.5, tension: 90, useNativeDriver: true }),
+    ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>;
+}
 
 export function SectionLabel({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   return <Text style={[styles.sectionLabel, style]}>{children}</Text>;
@@ -71,11 +119,32 @@ export function HeroResult({
   );
 }
 
-export function HeroMini({ variant, label, amount, style }: { variant: Gradient; label: string; amount: string; style?: ViewStyle }) {
+export function HeroMini({
+  variant,
+  label,
+  amount,
+  animateValue,
+  animateDelay,
+  style,
+}: {
+  variant: Gradient;
+  label: string;
+  amount: string;
+  // When provided, counts up to this number instead of showing `amount` flat.
+  animateValue?: number;
+  animateDelay?: number;
+  style?: ViewStyle;
+}) {
   return (
     <LinearGradient colors={GRADIENT_MAP[variant]} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.heroMini, style]}>
       <Text style={styles.heroMiniLbl}>{label}</Text>
-      <Text style={styles.heroMiniAmt}>{amount}</Text>
+      {animateValue !== undefined ? (
+        <PopIn delay={animateDelay}>
+          <AnimatedAmount value={animateValue} style={styles.heroMiniAmt} />
+        </PopIn>
+      ) : (
+        <Text style={styles.heroMiniAmt}>{amount}</Text>
+      )}
     </LinearGradient>
   );
 }
