@@ -45,6 +45,14 @@ export const GOAL_PRESETS: { type: GoalType; label: string; placeholder?: string
   { type: 'custom', label: 'Something else', placeholder: "What's the goal?" },
 ];
 
+// Shared short description of a goal — used anywhere the app names what the
+// user is optimizing for (Tools' "Your goal" card, Home's savings hero, etc).
+export function goalSummary(goal: Goal): string {
+  if (goal.type === 'debt_free') return 'Being debt-free faster';
+  if (goal.type === 'save_for') return `Saving for ${goal.label || 'something'}`;
+  return goal.label || 'Something else';
+}
+
 export type DailyLogs = Record<string, Record<string, boolean>>;
 
 export const EXPENSE_CATEGORIES = [

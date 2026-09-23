@@ -8,10 +8,30 @@ import LoanSheet from '../components/LoanSheet';
 import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
 import { computeExtraImpact, formatTerm, money, monthlyEquivalent, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
-import { HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, SUBSCRIPTIONS } from '../lib/types';
+import { Goal, HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, MyLoan, SUBSCRIPTIONS } from '../lib/types';
 
 type HabitFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly';
 const FREQUENCY_OPTIONS: HabitFrequency[] = ['daily', 'weekly', 'fortnightly', 'monthly'];
+
+// Debt-free (or no goal answered yet) keeps the loan-payoff framing; any
+// other goal cares about a savings pile, not interest saved, so it gets a
+// simple "here's what you'd have, and when" projection toward that goal
+// instead.
+function goalProjectionDetail(monthlyAmount: number, goal: Goal | null, myLoan: MyLoan | null): string {
+  if (goal && goal.type !== 'debt_free') {
+    const target = goal.label || 'your goal';
+    return `At this rate, that's ${money(monthlyAmount * 3)} toward ${target} in 3 months, or ${money(monthlyAmount * 12)} in a year.`;
+  }
+  if (myLoan) {
+    const impact = computeExtraImpact(myLoan.balance, myLoan.rate, myLoan.term, 0, monthlyAmount, 'monthly');
+    return impact.interestSaved > 0
+      ? `Based on your loan, paying this in would save ${money(impact.interestSaved)} in interest and clear it ${
+          impact.monthsSaved === 0 ? 'sooner' : formatTerm(impact.monthsSaved / 12, true) + ' sooner'
+        }.`
+      : `Based on your loan, ${money(monthlyAmount)}/mo isn't quite enough yet to show a real interest saving — try a bit more.`;
+  }
+  return `That's ${money(monthlyAmount * 12)}/year — add your loan above to see what it works out to in interest saved.`;
+}
 
 function getPreset(mode: HabitMode, key: string, customHabits: { daily: any[]; subscription: any[] }) {
   const presets = mode === 'daily' ? HABITS : SUBSCRIPTIONS;
@@ -22,7 +42,7 @@ function getPreset(mode: HabitMode, key: string, customHabits: { daily: any[]; s
 
 export default function HomeScreen() {
   const store = useStore();
-  const { transactions, myLoan, customHabits, deleteTransaction } = store;
+  const { transactions, myLoan, customHabits, deleteTransaction, goal } = store;
 
   const [txSheetOpen, setTxSheetOpen] = useState(false);
   const [loanSheetOpen, setLoanSheetOpen] = useState(false);
@@ -109,16 +129,8 @@ export default function HomeScreen() {
         ? 'Try spending less than you do now to see the saving.'
         : 'Pick a cheaper plan (or $0 to cancel) to see the saving.';
     }
-    if (myLoan) {
-      const impact = computeExtraImpact(myLoan.balance, myLoan.rate, myLoan.term, 0, monthlySaving, 'monthly');
-      return impact.interestSaved > 0
-        ? `Based on your loan, paying this in would save ${money(impact.interestSaved)} in interest and clear it ${
-            impact.monthsSaved === 0 ? 'sooner' : formatTerm(impact.monthsSaved / 12, true) + ' sooner'
-          }.`
-        : `Based on your loan, ${money(monthlySaving)}/mo isn't quite enough yet to show a real interest saving — try a bit more.`;
-    }
-    return `That's ${money(monthlySaving * 12)}/year — add your loan above to see what it works out to in interest saved.`;
-  }, [saving, habitNone, habitMode, monthlySaving, myLoan]);
+    return goalProjectionDetail(monthlySaving, goal, myLoan);
+  }, [saving, habitNone, habitMode, monthlySaving, myLoan, goal]);
 
   // ---------- Combined "You're saving" hero ----------
   const savingsHero = useMemo(() => {
@@ -127,20 +139,9 @@ export default function HomeScreen() {
     const previewCounts = !tracked && monthlySaving > 0 && !(selectedHabitKey === 'other' && !customName.trim());
     const total = trackedTotal + (previewCounts ? monthlySaving : 0);
     if (total <= 0) return null;
-    let detail: string;
-    if (myLoan && total > 0) {
-      const impact = computeExtraImpact(myLoan.balance, myLoan.rate, myLoan.term, 0, total, 'monthly');
-      detail =
-        impact.interestSaved > 0
-          ? `Based on your loan, paying this in would save ${money(impact.interestSaved)} in interest and clear it ${
-              impact.monthsSaved === 0 ? 'sooner' : formatTerm(impact.monthsSaved / 12, true) + ' sooner'
-            }.`
-          : `Based on your loan, ${money(total)}/mo isn't quite enough yet to show a real interest saving — track another habit.`;
-    } else {
-      detail = `That's ${money(total * 12)}/year — add your loan to see what it works out to in interest saved.`;
-    }
+    const detail = goalProjectionDetail(total, goal, myLoan);
     return { total, detail };
-  }, [transactions, tracked, monthlySaving, selectedHabitKey, customName, myLoan]);
+  }, [transactions, tracked, monthlySaving, selectedHabitKey, customName, myLoan, goal]);
 
   function trackHabit() {
     if (habitNone) return;
@@ -185,7 +186,9 @@ export default function HomeScreen() {
 
         {savingsHero ? (
           <>
-            <SectionLabel style={{ marginTop: 0 }}>You're saving</SectionLabel>
+            <SectionLabel style={{ marginTop: 0 }}>
+              {goal && goal.type !== 'debt_free' ? `You're saving — toward ${goal.label || 'your goal'}` : "You're saving"}
+            </SectionLabel>
             <HeroResult variant="g-green" label="Every month" amount={money(savingsHero.total) + '/mo'} sub={savingsHero.detail} />
           </>
         ) : null}

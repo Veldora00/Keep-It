@@ -6,17 +6,11 @@ import GoalPicker from '../components/GoalPicker';
 import { useAuth } from '../lib/auth';
 import { useStore } from '../lib/store';
 import { appNow } from '../lib/calculations';
-import { Goal } from '../lib/types';
+import { goalSummary } from '../lib/types';
 import GrowthCalc from './tools/GrowthCalc';
 import LoanPayoffCalc from './tools/LoanPayoffCalc';
 import BorrowCalc from './tools/BorrowCalc';
 import TaxCalc from './tools/TaxCalc';
-
-function goalSummary(goal: Goal): string {
-  if (goal.type === 'debt_free') return 'Being debt-free faster';
-  if (goal.type === 'save_for') return `Saving for ${goal.label || 'something'}`;
-  return goal.label || 'Something else';
-}
 
 const TABS = [
   { key: 'loan', label: 'Loan payoff' },
