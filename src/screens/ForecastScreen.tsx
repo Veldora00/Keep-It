@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, PageTitle } from '../components/ui';
 import { useStore } from '../lib/store';
@@ -34,19 +34,30 @@ export default function ForecastScreen() {
     return pts;
   }, [months, currentBalance, monthlyNet]);
 
-  const { pathD, areaD, dots } = useMemo(() => {
-    const w = 400,
-      h = 180,
-      pad = 20;
+  const CHART_W = 400;
+  const CHART_H = 220;
+  const PAD_LEFT = 58;
+  const PAD_RIGHT = 14;
+  const PAD_TOP = 26;
+  const PAD_BOTTOM = 30;
+
+  const chart = useMemo(() => {
     const min = Math.min(...points, 0);
     const max = Math.max(...points, 1);
     const range = max - min || 1;
-    const x = (i: number) => pad + (i / (points.length - 1)) * (w - 2 * pad);
-    const y = (v: number) => h - pad - ((v - min) / range) * (h - 2 * pad);
+    const x = (i: number) => PAD_LEFT + (i / (points.length - 1)) * (CHART_W - PAD_LEFT - PAD_RIGHT);
+    const y = (v: number) => CHART_H - PAD_BOTTOM - ((v - min) / range) * (CHART_H - PAD_TOP - PAD_BOTTOM);
     const d = points.map((v, i) => (i === 0 ? 'M' : 'L') + x(i) + ',' + y(v)).join(' ');
-    const area = d + ` L${x(points.length - 1)},${h - pad} L${x(0)},${h - pad} Z`;
-    const dotPts = points.map((v, i) => ({ cx: x(i), cy: y(v) }));
-    return { pathD: d, areaD: area, dots: dotPts };
+    const area = d + ` L${x(points.length - 1)},${CHART_H - PAD_BOTTOM} L${x(0)},${CHART_H - PAD_BOTTOM} Z`;
+    const dotPts = points.map((v, i) => ({ cx: x(i), cy: y(v), value: v, month: i }));
+    // Only label a handful of points so the numbers don't collide: the
+    // start, the end, and (for longer ranges) the midpoint.
+    const labelIdx = new Set([0, points.length - 1, Math.round((points.length - 1) / 2)]);
+    // Month tick marks along the bottom: every point for short ranges,
+    // thinning out for longer ones so the labels don't overlap.
+    const tickStep = points.length > 7 ? 2 : 1;
+    const gridLines = [min, (min + max) / 2, max];
+    return { pathD: d, areaD: area, dots: dotPts, labelIdx, tickStep, gridLines, x, y };
   }, [points]);
 
   const note =
@@ -67,12 +78,60 @@ export default function ForecastScreen() {
       </View>
 
       <Card>
-        <Svg width="100%" height={180} viewBox="0 0 400 180">
-          <Path d={areaD} fill="#1E9E82" fillOpacity={0.12} />
-          <Path d={pathD} fill="none" stroke="#1E9E82" strokeWidth={2.5} />
-          {dots.map((p, i) => (
+        <Svg width="100%" height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`}>
+          {chart.gridLines.map((v, i) => (
+            <React.Fragment key={i}>
+              <Line
+                x1={PAD_LEFT}
+                x2={CHART_W - PAD_RIGHT}
+                y1={chart.y(v)}
+                y2={chart.y(v)}
+                stroke={colors.line}
+                strokeWidth={1}
+              />
+              <SvgText x={PAD_LEFT - 8} y={chart.y(v) + 4} fontSize={10} fill={colors.inkFaint} textAnchor="end">
+                {money(v)}
+              </SvgText>
+            </React.Fragment>
+          ))}
+
+          <Path d={chart.areaD} fill="#1E9E82" fillOpacity={0.12} />
+          <Path d={chart.pathD} fill="none" stroke="#1E9E82" strokeWidth={2.5} />
+
+          {chart.dots.map((p, i) => (
             <Circle key={i} cx={p.cx} cy={p.cy} r={3.5} fill="#1E9E82" />
           ))}
+
+          {chart.dots.map((p, i) =>
+            chart.labelIdx.has(i) ? (
+              <SvgText
+                key={`v${i}`}
+                x={p.cx}
+                y={p.cy - 10}
+                fontSize={11}
+                fontWeight="600"
+                fill={colors.ink}
+                textAnchor={i === 0 ? 'start' : i === chart.dots.length - 1 ? 'end' : 'middle'}
+              >
+                {money(p.value)}
+              </SvgText>
+            ) : null
+          )}
+
+          {chart.dots.map((p, i) =>
+            i % chart.tickStep === 0 ? (
+              <SvgText
+                key={`m${i}`}
+                x={p.cx}
+                y={CHART_H - PAD_BOTTOM + 18}
+                fontSize={10}
+                fill={colors.inkFaint}
+                textAnchor={i === 0 ? 'start' : i === chart.dots.length - 1 ? 'end' : 'middle'}
+              >
+                {p.month === 0 ? 'Now' : `${p.month}mo`}
+              </SvgText>
+            ) : null
+          )}
         </Svg>
         <Text style={styles.note}>{note}</Text>
       </Card>

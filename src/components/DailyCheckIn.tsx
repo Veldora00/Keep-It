@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, HeroMini, PopIn, PrimaryButton } from './ui';
@@ -20,6 +20,16 @@ export default function DailyCheckIn() {
   const [missedAmount, setMissedAmount] = useState(0);
 
   const today = todayKey();
+
+  // dismissedToday used to live forever once a habit was answered — nothing
+  // ever cleared it, so once you'd said yes/no for a habit it never asked
+  // again, even the next real (or fast-forwarded) day. Clear it whenever the
+  // day itself changes, so "answered" only means "answered for today".
+  const lastSeenDay = useRef(today);
+  if (lastSeenDay.current !== today) {
+    lastSeenDay.current = today;
+    if (Object.keys(dismissedToday).length) setDismissedToday({});
+  }
 
   const dailyHabits = useMemo(() => transactions.filter((t) => t.habitTrackKey && t.habitTrackKey.endsWith(':daily')), [transactions]);
 
