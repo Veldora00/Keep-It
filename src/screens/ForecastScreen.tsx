@@ -8,6 +8,91 @@ import { FREQUENCY_LABELS, monthlyEquivalent, money } from '../lib/calculations'
 
 const RANGES = [3, 6, 12];
 
+type ChartData = ReturnType<typeof buildChartData>;
+function buildChartData(pts: number[], chartW: number, chartH: number, padLeft: number, padRight: number, padTop: number, padBottom: number) {
+  const min = Math.min(...pts, 0);
+  const max = Math.max(...pts, 1);
+  const range = max - min || 1;
+  const x = (i: number) => padLeft + (i / (pts.length - 1)) * (chartW - padLeft - padRight);
+  const y = (v: number) => chartH - padBottom - ((v - min) / range) * (chartH - padTop - padBottom);
+  const d = pts.map((v, i) => (i === 0 ? 'M' : 'L') + x(i) + ',' + y(v)).join(' ');
+  const area = d + ` L${x(pts.length - 1)},${chartH - padBottom} L${x(0)},${chartH - padBottom} Z`;
+  const dotPts = pts.map((v, i) => ({ cx: x(i), cy: y(v), value: v, month: i }));
+  const labelIdx = new Set([0, pts.length - 1, Math.round((pts.length - 1) / 2)]);
+  const tickStep = pts.length > 7 ? 2 : 1;
+  const gridLines = [min, (min + max) / 2, max];
+  return { pathD: d, areaD: area, dots: dotPts, labelIdx, tickStep, gridLines, y };
+}
+
+function ForecastChart({
+  chart,
+  color,
+  chartW,
+  chartH,
+  padLeft,
+  padRight,
+  padBottom,
+}: {
+  chart: ChartData;
+  color: string;
+  chartW: number;
+  chartH: number;
+  padLeft: number;
+  padRight: number;
+  padBottom: number;
+}) {
+  return (
+    <Svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
+      {chart.gridLines.map((v, i) => (
+        <React.Fragment key={i}>
+          <Line x1={padLeft} x2={chartW - padRight} y1={chart.y(v)} y2={chart.y(v)} stroke={colors.line} strokeWidth={1} />
+          <SvgText x={padLeft - 8} y={chart.y(v) + 4} fontSize={10} fill={colors.inkFaint} textAnchor="end">
+            {money(v)}
+          </SvgText>
+        </React.Fragment>
+      ))}
+
+      <Path d={chart.areaD} fill={color} fillOpacity={0.12} />
+      <Path d={chart.pathD} fill="none" stroke={color} strokeWidth={2.5} />
+
+      {chart.dots.map((p, i) => (
+        <Circle key={i} cx={p.cx} cy={p.cy} r={3.5} fill={color} />
+      ))}
+
+      {chart.dots.map((p, i) =>
+        chart.labelIdx.has(i) ? (
+          <SvgText
+            key={`v${i}`}
+            x={p.cx}
+            y={p.cy - 10}
+            fontSize={11}
+            fontWeight="600"
+            fill={colors.ink}
+            textAnchor={i === 0 ? 'start' : i === chart.dots.length - 1 ? 'end' : 'middle'}
+          >
+            {money(p.value)}
+          </SvgText>
+        ) : null
+      )}
+
+      {chart.dots.map((p, i) =>
+        i % chart.tickStep === 0 ? (
+          <SvgText
+            key={`m${i}`}
+            x={p.cx}
+            y={chartH - padBottom + 18}
+            fontSize={10}
+            fill={colors.inkFaint}
+            textAnchor={i === 0 ? 'start' : i === chart.dots.length - 1 ? 'end' : 'middle'}
+          >
+            {p.month === 0 ? 'Now' : `${p.month}mo`}
+          </SvgText>
+        ) : null
+      )}
+    </Svg>
+  );
+}
+
 export default function ForecastScreen() {
   const { transactions } = useStore();
   const [months, setMonths] = useState(3);
@@ -34,6 +119,18 @@ export default function ForecastScreen() {
     return pts;
   }, [months, currentBalance, monthlyNet]);
 
+  // The balance chart above can legitimately go negative — it's every
+  // recurring dollar in and out, loan payments included, not just what
+  // you've saved. That reads as "everything is going backwards" even when
+  // your habit cuts are working, so it's paired with a second, always-
+  // positive chart of just the money your tracked habits are putting aside.
+  const monthlySavingsRate = useMemo(() => recurring.reduce((s, t) => s + (t.habitSaving || 0), 0), [recurring]);
+  const savingsPoints = useMemo(() => {
+    const pts: number[] = [];
+    for (let m = 0; m <= months; m++) pts.push(monthlySavingsRate * m);
+    return pts;
+  }, [months, monthlySavingsRate]);
+
   const CHART_W = 400;
   const CHART_H = 220;
   const PAD_LEFT = 58;
@@ -41,29 +138,23 @@ export default function ForecastScreen() {
   const PAD_TOP = 26;
   const PAD_BOTTOM = 30;
 
-  const chart = useMemo(() => {
-    const min = Math.min(...points, 0);
-    const max = Math.max(...points, 1);
-    const range = max - min || 1;
-    const x = (i: number) => PAD_LEFT + (i / (points.length - 1)) * (CHART_W - PAD_LEFT - PAD_RIGHT);
-    const y = (v: number) => CHART_H - PAD_BOTTOM - ((v - min) / range) * (CHART_H - PAD_TOP - PAD_BOTTOM);
-    const d = points.map((v, i) => (i === 0 ? 'M' : 'L') + x(i) + ',' + y(v)).join(' ');
-    const area = d + ` L${x(points.length - 1)},${CHART_H - PAD_BOTTOM} L${x(0)},${CHART_H - PAD_BOTTOM} Z`;
-    const dotPts = points.map((v, i) => ({ cx: x(i), cy: y(v), value: v, month: i }));
-    // Only label a handful of points so the numbers don't collide: the
-    // start, the end, and (for longer ranges) the midpoint.
-    const labelIdx = new Set([0, points.length - 1, Math.round((points.length - 1) / 2)]);
-    // Month tick marks along the bottom: every point for short ranges,
-    // thinning out for longer ones so the labels don't overlap.
-    const tickStep = points.length > 7 ? 2 : 1;
-    const gridLines = [min, (min + max) / 2, max];
-    return { pathD: d, areaD: area, dots: dotPts, labelIdx, tickStep, gridLines, x, y };
-  }, [points]);
+  const chart = useMemo(() => buildChartData(points, CHART_W, CHART_H, PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM), [points]);
+  const savingsChart = useMemo(
+    () => buildChartData(savingsPoints, CHART_W, CHART_H, PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM),
+    [savingsPoints]
+  );
 
   const note =
     recurring.length === 0
       ? 'Mark some transactions as recurring to see a projection here.'
       : `At this pace, your balance moves by ${money(monthlyNet)} per month, reaching ${money(points[points.length - 1])} in ${months} months.`;
+
+  const savingsNote =
+    monthlySavingsRate <= 0
+      ? 'Track an everyday habit on Home to see your savings build up here.'
+      : `Your tracked habits put aside ${money(monthlySavingsRate)} per month — ${money(
+          savingsPoints[savingsPoints.length - 1]
+        )} saved by ${months} months, on top of whatever your balance above is doing.`;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.paperWarm }} contentContainerStyle={styles.screen}>
@@ -77,63 +168,16 @@ export default function ForecastScreen() {
         ))}
       </View>
 
+      <Text style={styles.sectionLabel}>Overall balance</Text>
       <Card>
-        <Svg width="100%" height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`}>
-          {chart.gridLines.map((v, i) => (
-            <React.Fragment key={i}>
-              <Line
-                x1={PAD_LEFT}
-                x2={CHART_W - PAD_RIGHT}
-                y1={chart.y(v)}
-                y2={chart.y(v)}
-                stroke={colors.line}
-                strokeWidth={1}
-              />
-              <SvgText x={PAD_LEFT - 8} y={chart.y(v) + 4} fontSize={10} fill={colors.inkFaint} textAnchor="end">
-                {money(v)}
-              </SvgText>
-            </React.Fragment>
-          ))}
-
-          <Path d={chart.areaD} fill="#1E9E82" fillOpacity={0.12} />
-          <Path d={chart.pathD} fill="none" stroke="#1E9E82" strokeWidth={2.5} />
-
-          {chart.dots.map((p, i) => (
-            <Circle key={i} cx={p.cx} cy={p.cy} r={3.5} fill="#1E9E82" />
-          ))}
-
-          {chart.dots.map((p, i) =>
-            chart.labelIdx.has(i) ? (
-              <SvgText
-                key={`v${i}`}
-                x={p.cx}
-                y={p.cy - 10}
-                fontSize={11}
-                fontWeight="600"
-                fill={colors.ink}
-                textAnchor={i === 0 ? 'start' : i === chart.dots.length - 1 ? 'end' : 'middle'}
-              >
-                {money(p.value)}
-              </SvgText>
-            ) : null
-          )}
-
-          {chart.dots.map((p, i) =>
-            i % chart.tickStep === 0 ? (
-              <SvgText
-                key={`m${i}`}
-                x={p.cx}
-                y={CHART_H - PAD_BOTTOM + 18}
-                fontSize={10}
-                fill={colors.inkFaint}
-                textAnchor={i === 0 ? 'start' : i === chart.dots.length - 1 ? 'end' : 'middle'}
-              >
-                {p.month === 0 ? 'Now' : `${p.month}mo`}
-              </SvgText>
-            ) : null
-          )}
-        </Svg>
+        <ForecastChart chart={chart} color="#1E9E82" chartW={CHART_W} chartH={CHART_H} padLeft={PAD_LEFT} padRight={PAD_RIGHT} padBottom={PAD_BOTTOM} />
         <Text style={styles.note}>{note}</Text>
+      </Card>
+
+      <Text style={styles.sectionLabel}>Money saved by your habits</Text>
+      <Card>
+        <ForecastChart chart={savingsChart} color="#1E9E82" chartW={CHART_W} chartH={CHART_H} padLeft={PAD_LEFT} padRight={PAD_RIGHT} padBottom={PAD_BOTTOM} />
+        <Text style={styles.note}>{savingsNote}</Text>
       </Card>
 
       <Text style={styles.sectionLabel}>Recurring items counted</Text>

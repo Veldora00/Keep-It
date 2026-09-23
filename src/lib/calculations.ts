@@ -6,6 +6,13 @@ export function money(n: number): string {
   return sign + '$' + Math.abs(Math.round(n)).toLocaleString('en-AU');
 }
 
+// Dollar amounts derived from division (e.g. a monthly total spread across
+// ~30 days) come out as long repeating decimals like 5.069444444444445 —
+// fine for math, unreadable in an input field. Round to cents for display.
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function formatTerm(years: number, short?: boolean): string {
   if (years < 1) {
     const m = Math.round(years * 12);
@@ -236,13 +243,13 @@ export interface Trophy {
   icon: string;
 }
 export const TROPHY_MILESTONES: Trophy[] = [
-  { days: 3, label: '3-day streak', icon: '🔥' },
-  { days: 7, label: '1 week', icon: '⭐' },
-  { days: 14, label: '2 weeks', icon: '🥉' },
-  { days: 30, label: '1 month', icon: '🥈' },
-  { days: 60, label: '2 months', icon: '🥇' },
-  { days: 100, label: '100 days', icon: '🏆' },
-  { days: 365, label: '1 year', icon: '👑' },
+  { days: 3, label: 'Spark', icon: '🔥' },
+  { days: 7, label: 'Momentum', icon: '⭐' },
+  { days: 14, label: 'Bronze Habit', icon: '🥉' },
+  { days: 30, label: 'Silver Streak', icon: '🥈' },
+  { days: 60, label: 'Gold Standard', icon: '🥇' },
+  { days: 100, label: 'Centurion', icon: '🏆' },
+  { days: 365, label: 'Legend', icon: '👑' },
 ];
 export function earnedTrophies(bestStreak: number): Trophy[] {
   return TROPHY_MILESTONES.filter((t) => bestStreak >= t.days);

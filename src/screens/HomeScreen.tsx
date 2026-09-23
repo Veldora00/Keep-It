@@ -7,8 +7,8 @@ import AddTransactionSheet from '../components/AddTransactionSheet';
 import LoanSheet from '../components/LoanSheet';
 import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
-import { computeExtraImpact, formatTerm, money, monthlyEquivalent, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
-import { Goal, HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, MyLoan, SUBSCRIPTIONS } from '../lib/types';
+import { computeExtraImpact, formatTerm, money, monthlyEquivalent, round2, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
+import { Goal, HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, MyLoan, SUBSCRIPTIONS, Transaction } from '../lib/types';
 
 type HabitFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly';
 const FREQUENCY_OPTIONS: HabitFrequency[] = ['daily', 'weekly', 'fortnightly', 'monthly'];
@@ -40,6 +40,23 @@ function getPreset(mode: HabitMode, key: string, customHabits: { daily: any[]; s
   return custom ? { now: custom.now, then: custom.then } : { now: 0, then: 0 };
 }
 
+// Once a habit is actually tracked, its real ongoing numbers live on the
+// tracked transaction (and get updated there by the daily check-in's
+// recalibration) — not on the static preset. Without this, the editor kept
+// showing the original preset ("you spend $6") even after you'd told the
+// check-in your real target was $4.
+function trackedOverride(mode: HabitMode, key: string, transactions: Transaction[]): { now: number; then: number } | null {
+  if (key === 'other') return null;
+  const trackKey = habitTrackKeyFn(key, mode, '');
+  const tx = transactions.find((t) => t.habitTrackKey === trackKey);
+  if (!tx) return null;
+  const monthlyThen = tx.amount;
+  const monthlyNow = monthlyThen + (tx.habitSaving || 0);
+  return mode === 'daily'
+    ? { now: round2(monthlyNow / 30), then: round2(monthlyThen / 30) }
+    : { now: round2(monthlyNow), then: round2(monthlyThen) };
+}
+
 export default function HomeScreen() {
   const store = useStore();
   const { transactions, myLoan, customHabits, deleteTransaction, goal } = store;
@@ -53,7 +70,7 @@ export default function HomeScreen() {
   const [selectedHabitKey, setSelectedHabitKey] = useState('coffee');
   const [habitNone, setHabitNone] = useState(false);
   const [customName, setCustomName] = useState('');
-  const initial = getPreset('daily', 'coffee', customHabits);
+  const initial = trackedOverride('daily', 'coffee', transactions) || getPreset('daily', 'coffee', customHabits);
   const [nowStr, setNowStr] = useState(String(initial.now));
   const [thenStr, setThenStr] = useState(String(initial.then));
   const [frequency, setFrequency] = useState<HabitFrequency>('daily');
@@ -67,7 +84,7 @@ export default function HomeScreen() {
     setFrequency(mode === 'daily' ? 'daily' : 'monthly');
     setCutChoice(null);
     setCutCustomOpen(false);
-    const preset = getPreset(mode, key, customHabits);
+    const preset = trackedOverride(mode, key, transactions) || getPreset(mode, key, customHabits);
     setNowStr(String(preset.now));
     setThenStr(String(preset.then));
     if (key !== 'other') setCustomName('');
@@ -80,7 +97,7 @@ export default function HomeScreen() {
       setNowStr('0');
       setThenStr('0');
     } else {
-      const preset = getPreset(habitMode, selectedHabitKey, customHabits);
+      const preset = trackedOverride(habitMode, selectedHabitKey, transactions) || getPreset(habitMode, selectedHabitKey, customHabits);
       setNowStr(String(preset.now));
       setThenStr(String(preset.then));
     }
@@ -156,12 +173,18 @@ export default function HomeScreen() {
     });
   }
 
+  function untrackHabit() {
+    const trackKey = habitTrackKeyFn(selectedHabitKey, habitMode, label);
+    const tx = transactions.find((t) => t.habitTrackKey === trackKey);
+    if (tx) deleteTransaction(tx.id);
+  }
+
   const trackBtnLabel = habitNone
     ? "Nothing to track — you don't do this"
     : tracked
-    ? '✓ Tracking — already in your spending'
+    ? '✓ Tracking — tap to stop'
     : 'Track this — add to my monthly spending';
-  const trackBtnDisabled = habitNone || tracked;
+  const trackBtnDisabled = habitNone;
 
   // ---------- Balance / recent / categories ----------
   const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
@@ -292,6 +315,10 @@ export default function HomeScreen() {
           <PrimaryButton
             title={selectedHabitKey === 'other' && customName.trim() ? 'Save this custom habit, then track it' : trackBtnLabel}
             onPress={() => {
+              if (tracked) {
+                untrackHabit();
+                return;
+              }
               if (selectedHabitKey === 'other' && customName.trim() && !customList.some((c) => c.label === customName.trim())) {
                 confirmCustomHabit();
               }
@@ -299,6 +326,7 @@ export default function HomeScreen() {
             }}
             disabled={trackBtnDisabled}
           />
+          {tracked ? <Text style={styles.untrackHint}>Tap again to stop tracking this habit.</Text> : null}
         </Card>
 
         {myLoan ? (
@@ -440,6 +468,7 @@ const styles = StyleSheet.create({
   cutBtnAmt: { fontSize: 13.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.ink, marginTop: 2 },
   cutBtnTextActive: { color: '#fff' },
   cutPreview: { fontSize: 12.5, color: colors.inkFaint, marginBottom: 14, lineHeight: 17 },
+  untrackHint: { fontSize: 11.5, color: colors.inkFaint, textAlign: 'center', marginTop: 8 },
   loanCard: {
     backgroundColor: colors.paper,
     borderWidth: 1,

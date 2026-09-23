@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, HeroMini, PopIn, PrimaryButton } from './ui';
 import { useStore } from '../lib/store';
-import { computeExtraImpact, computeStreak, earnedTrophies, money, todayKey, TROPHY_MILESTONES } from '../lib/calculations';
+import { computeExtraImpact, computeStreak, earnedTrophies, money, round2, todayKey, TROPHY_MILESTONES } from '../lib/calculations';
 
 function splitIcon(name: string): { icon: string; rest: string } {
   const m = name.match(/^(\p{Extended_Pictographic}️?)\s+(.*)$/u);
@@ -14,10 +14,10 @@ export default function DailyCheckIn() {
   const { transactions, dailyLogs, toggleDayHabit, adjustHabitTarget, myLoan } = useStore();
   const [dismissedToday, setDismissedToday] = useState<Record<string, boolean>>({});
   const [stage, setStage] = useState<'ask' | 'reward' | 'miss'>('ask');
+  const [spentInput, setSpentInput] = useState('');
   const [lowestInput, setLowestInput] = useState('');
   const [revealStreak, setRevealStreak] = useState(0);
   const [revealTrophy, setRevealTrophy] = useState<string | null>(null);
-  const [missedAmount, setMissedAmount] = useState(0);
 
   const today = todayKey();
 
@@ -45,9 +45,9 @@ export default function DailyCheckIn() {
 
   const trackKey = current.habitTrackKey!;
   const { icon, rest } = splitIcon(current.name.replace(/\s*\((new plan|cancelled)\)$/, ''));
-  const dailyTarget = current.amount / 30;
-  const dailySaving = (current.habitSaving || 0) / 30;
-  const dailyActual = dailyTarget + dailySaving;
+  const dailyTarget = round2(current.amount / 30);
+  const dailySaving = round2((current.habitSaving || 0) / 30);
+  const dailyActual = round2(dailyTarget + dailySaving);
 
   function respondYes() {
     toggleDayHabit(today, trackKey);
@@ -63,15 +63,22 @@ export default function DailyCheckIn() {
   }
 
   function respondNo() {
-    setMissedAmount(dailySaving);
+    setSpentInput(String(dailyActual));
     setLowestInput(String(dailyTarget));
     setStage('miss');
   }
 
+  // Live "you could've saved" figure — today's actual spend minus the
+  // realistic target the user is setting, recomputed as either field changes
+  // instead of frozen at the moment the popup opened.
+  const spentToday = Math.max(0, parseFloat(spentInput) || 0);
+  const newTarget = Math.max(0, parseFloat(lowestInput) || 0);
+  const missedAmount = round2(Math.max(0, spentToday - newTarget));
+
   function submitRecalibration() {
-    const newDailyTarget = Math.max(0, parseFloat(lowestInput) || dailyTarget);
-    const newMonthlyAmount = newDailyTarget * 30;
-    const newMonthlySaving = Math.max(0, (dailyActual - newDailyTarget) * 30);
+    const newDailyTarget = newTarget || dailyTarget;
+    const newMonthlyAmount = round2(newDailyTarget * 30);
+    const newMonthlySaving = round2(Math.max(0, (dailyActual - newDailyTarget) * 30));
     adjustHabitTarget(trackKey, newMonthlyAmount, newMonthlySaving);
     close();
   }
@@ -79,6 +86,7 @@ export default function DailyCheckIn() {
   function close() {
     setDismissedToday((d) => ({ ...d, [trackKey]: true }));
     setStage('ask');
+    setSpentInput('');
     setLowestInput('');
   }
 
@@ -137,7 +145,19 @@ export default function DailyCheckIn() {
             <>
               <Text style={styles.icon}>😬</Text>
               <Text style={styles.title}>You could've saved {money(missedAmount)} today</Text>
-              <Text style={styles.subtitle}>No stress — what's the lowest you can realistically go for {rest.toLowerCase()}?</Text>
+              <Text style={styles.subtitle}>No stress — two quick things.</Text>
+
+              <Text style={styles.fieldLabel}>How much did you actually spend on {rest.toLowerCase()} today?</Text>
+              <TextInput
+                style={styles.input}
+                value={spentInput}
+                onChangeText={setSpentInput}
+                keyboardType="decimal-pad"
+                placeholder={String(dailyActual)}
+                placeholderTextColor={colors.inkFaint}
+              />
+
+              <Text style={styles.fieldLabel}>What's a realistic target to aim for going forward?</Text>
               <TextInput
                 style={styles.input}
                 value={lowestInput}
@@ -146,6 +166,7 @@ export default function DailyCheckIn() {
                 placeholder={String(dailyTarget)}
                 placeholderTextColor={colors.inkFaint}
               />
+
               <PrimaryButton title="Set new target" onPress={submitRecalibration} />
               <Pressable onPress={close} hitSlop={8}>
                 <Text style={styles.skipText}>Skip for today</Text>
@@ -175,6 +196,7 @@ const styles = StyleSheet.create({
   yesBtnText: { color: '#fff', fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 15 },
   trophyCard: { width: '100%', backgroundColor: colors.mint, marginTop: 14, marginBottom: 4, paddingVertical: 12, alignItems: 'center' },
   trophyText: { color: colors.accentDeep, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 14 },
+  fieldLabel: { fontSize: 12.5, color: colors.inkDim, fontFamily: fonts.sansSemiBold, fontWeight: '600', alignSelf: 'flex-start', marginBottom: 6, marginTop: 2 },
   input: {
     width: '100%',
     borderWidth: 1,
