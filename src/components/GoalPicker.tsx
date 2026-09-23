@@ -21,6 +21,7 @@ export default function GoalPicker({
 }) {
   const [type, setType] = useState<GoalType>(initialGoal?.type || 'debt_free');
   const [label, setLabel] = useState(initialGoal?.label || '');
+  const [targetAmountStr, setTargetAmountStr] = useState(initialGoal?.targetAmount ? String(initialGoal.targetAmount) : '');
 
   const needsLabel = type === 'save_for' || type === 'custom';
   const preset = GOAL_PRESETS.find((g) => g.type === type)!;
@@ -43,19 +44,36 @@ export default function GoalPicker({
       </View>
 
       {needsLabel ? (
-        <Field
-          label={type === 'save_for' ? "What are you saving for?" : 'What is it?'}
-          value={label}
-          onChangeText={setLabel}
-          placeholder={preset.placeholder}
-          keyboardType="default"
-        />
+        <>
+          <Field
+            label={type === 'save_for' ? "What are you saving for?" : 'What is it?'}
+            value={label}
+            onChangeText={setLabel}
+            placeholder={preset.placeholder}
+            keyboardType="default"
+          />
+          <Field
+            label="How much does it cost? (optional)"
+            value={targetAmountStr}
+            onChangeText={setTargetAmountStr}
+            placeholder="e.g. 500"
+          />
+          {targetAmountStr.trim() ? (
+            <Text style={styles.targetHint}>We'll tell you roughly when you'll get there at your current saving pace.</Text>
+          ) : null}
+        </>
       ) : null}
 
       <PrimaryButton
         title={saveLabel}
         disabled={!canSave}
-        onPress={() => onSave({ type, label: needsLabel ? label.trim() : null })}
+        onPress={() =>
+          onSave({
+            type,
+            label: needsLabel ? label.trim() : null,
+            targetAmount: needsLabel && targetAmountStr.trim() ? Math.max(0, parseFloat(targetAmountStr) || 0) : null,
+          })
+        }
       />
     </View>
   );
@@ -63,4 +81,5 @@ export default function GoalPicker({
 
 const styles = StyleSheet.create({
   optionList: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 8, marginBottom: 6 },
+  targetHint: { fontSize: 12, color: colors.inkFaint, marginTop: -8, marginBottom: 14, lineHeight: 16 },
 });

@@ -47,6 +47,18 @@ interface Store {
   canFastForward: boolean;
   dayOffset: number;
   setDayOffset: (days: number) => void;
+  // Test-only, same gating as canFastForward. resetTestLogs clears just the
+  // day-by-day "did you keep to it" logs (what fast-forwarding piles up);
+  // resetAllData wipes everything for this test account — habits, logs,
+  // loan, goal — back to a blank slate.
+  resetTestLogs: () => void;
+  resetAllData: () => void;
+  // Subscriptions (Netflix etc) never get asked about via the daily
+  // check-in (that's for everyday habits only) — this is the separate path
+  // that periodically confirms "is it still $X/month?" and lets the price be
+  // updated. Bumps the tracked transaction's date, which is what the
+  // recheck-due calculation is based off.
+  reconfirmSubscription: (habitTrackKey: string, newAmount?: number) => void;
 }
 
 function dayOffsetKey(userId: string) {
@@ -164,7 +176,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           nextDl[r.date_key][r.track_key] = !!r.tracked;
         });
         const nextMl: MyLoan | null = mlRows ? { balance: Number(mlRows.balance), rate: Number(mlRows.rate), term: Number(mlRows.term) } : null;
-        const nextGoal: Goal | null = goalRow ? { type: goalRow.goal_type, label: goalRow.goal_label ?? null } : null;
+        const nextGoal: Goal | null = goalRow
+          ? { type: goalRow.goal_type, label: goalRow.goal_label ?? null, targetAmount: goalRow.target_amount != null ? Number(goalRow.target_amount) : null }
+          : null;
 
         setTransactions(nextTx);
         setCustomHabits(nextCh);
@@ -352,11 +366,65 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.setItem(scopedKey(LEGACY_GOAL_KEY, userId), JSON.stringify(g)).catch(() => {});
         supabase
           .from('keepit_goal')
-          .upsert({ user_id: userId, goal_type: g.type, goal_label: g.label, updated_at: new Date().toISOString() })
+          .upsert({ user_id: userId, goal_type: g.type, goal_label: g.label, target_amount: g.targetAmount ?? null, updated_at: new Date().toISOString() })
           .then(() => {});
       }
     },
     [userId]
+  );
+
+  // Clears only the daily check-in logs — used by the "Reset to today" test
+  // button so fast-forwarding + resetting doesn't leave behind days that were
+  // marked done/missed while simulating time.
+  const resetTestLogs = useCallback(() => {
+    if (!canFastForward) return;
+    setDailyLogs({});
+    if (userId) {
+      AsyncStorage.setItem(scopedKey(LEGACY_DL_KEY, userId), JSON.stringify({})).catch(() => {});
+      supabase.from('keepit_daily_logs').delete().eq('user_id', userId).then(() => {});
+    }
+  }, [canFastForward, userId]);
+
+  // Full wipe for the test account: habits, logs, loan, goal, and the
+  // fast-forward clock all back to nothing.
+  const resetAllData = useCallback(() => {
+    if (!canFastForward) return;
+    setTransactions([]);
+    setCustomHabits({ daily: [], subscription: [] });
+    setDailyLogs({});
+    setMyLoan(null);
+    setGoal(null);
+    setDayOffsetState(0);
+    setGlobalDayOffset(0);
+    if (userId) {
+      AsyncStorage.setItem(scopedKey(LEGACY_TX_KEY, userId), JSON.stringify([])).catch(() => {});
+      AsyncStorage.setItem(scopedKey(LEGACY_CH_KEY, userId), JSON.stringify({ daily: [], subscription: [] })).catch(() => {});
+      AsyncStorage.setItem(scopedKey(LEGACY_DL_KEY, userId), JSON.stringify({})).catch(() => {});
+      AsyncStorage.removeItem(scopedKey(LEGACY_ML_KEY, userId)).catch(() => {});
+      AsyncStorage.removeItem(scopedKey(LEGACY_GOAL_KEY, userId)).catch(() => {});
+      AsyncStorage.setItem(dayOffsetKey(userId), '0').catch(() => {});
+      supabase.from('keepit_transactions').delete().eq('user_id', userId).then(() => {});
+      supabase.from('keepit_custom_habits').delete().eq('user_id', userId).then(() => {});
+      supabase.from('keepit_daily_logs').delete().eq('user_id', userId).then(() => {});
+      supabase.from('keepit_myloan').delete().eq('user_id', userId).then(() => {});
+      supabase.from('keepit_goal').delete().eq('user_id', userId).then(() => {});
+    }
+  }, [canFastForward, userId]);
+
+  const reconfirmSubscription = useCallback(
+    (trackKey: string, newAmount?: number) => {
+      const nowIso = new Date().toISOString();
+      const next = transactions.map((t) =>
+        t.habitTrackKey === trackKey ? { ...t, amount: newAmount != null ? newAmount : t.amount, date: nowIso } : t
+      );
+      setTransactions(next);
+      cacheTx(next);
+      const row = next.find((t) => t.habitTrackKey === trackKey);
+      if (userId && row) {
+        supabase.from('keepit_transactions').update({ amount: row.amount, date: row.date }).eq('user_id', userId).eq('id', row.id).then(() => {});
+      }
+    },
+    [transactions, cacheTx, userId]
   );
 
   const habitTrackKey = useCallback(habitTrackKeyFn, []);
@@ -430,6 +498,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       canFastForward,
       dayOffset,
       setDayOffset,
+      resetTestLogs,
+      resetAllData,
+      reconfirmSubscription,
     }),
     [
       ready,
@@ -452,6 +523,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       canFastForward,
       dayOffset,
       setDayOffset,
+      resetTestLogs,
+      resetAllData,
+      reconfirmSubscription,
     ]
   );
 

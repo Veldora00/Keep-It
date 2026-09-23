@@ -22,7 +22,7 @@ const TABS = [
 export default function ToolsScreen() {
   const [tab, setTab] = useState('loan');
   const { session, signOut } = useAuth();
-  const { canFastForward, dayOffset, setDayOffset, goal, saveGoal } = useStore();
+  const { canFastForward, dayOffset, setDayOffset, resetTestLogs, resetAllData, goal, saveGoal } = useStore();
   const [goalEditorOpen, setGoalEditorOpen] = useState(false);
 
   return (
@@ -77,8 +77,30 @@ export default function ToolsScreen() {
             <Chip label="+1 day" onPress={() => setDayOffset(dayOffset + 1)} />
             <Chip label="+7 days" onPress={() => setDayOffset(dayOffset + 7)} />
             <Chip label="+30 days" onPress={() => setDayOffset(dayOffset + 30)} />
-            <Chip label="Reset to today" onPress={() => setDayOffset(0)} />
+            <Chip
+              label="Reset to today"
+              onPress={() => {
+                setDayOffset(0);
+                resetTestLogs();
+              }}
+            />
           </ScrollView>
+
+          <Pressable
+            style={styles.dangerBtn}
+            onPress={() =>
+              Alert.alert(
+                'Reset everything?',
+                'This wipes every habit, log, loan, and goal on this test account — there\'s no undo.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Reset everything', style: 'destructive', onPress: () => resetAllData() },
+                ]
+              )
+            }
+          >
+            <Text style={styles.dangerBtnText}>Reset everything (admin only)</Text>
+          </Pressable>
         </>
       ) : null}
 
@@ -106,6 +128,8 @@ const styles = StyleSheet.create({
   email: { fontSize: 13.5, color: colors.inkDim, fontFamily: fonts.sans, marginBottom: 12 },
   signOutBtn: { borderWidth: 1, borderColor: colors.lineStrong, borderRadius: radii.sm, paddingVertical: 13, alignItems: 'center', marginBottom: 20 },
   signOutText: { color: colors.red, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 14.5 },
+  dangerBtn: { borderWidth: 1, borderColor: colors.red, backgroundColor: colors.redSoft, borderRadius: radii.sm, paddingVertical: 12, alignItems: 'center', marginBottom: 20 },
+  dangerBtnText: { color: colors.red, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 13.5 },
   goalCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, marginBottom: 20 },
   goalText: { fontSize: 14.5, color: colors.ink, fontFamily: fonts.sansSemiBold, fontWeight: '600', flexShrink: 1, paddingRight: 12 },
   goalEdit: { fontSize: 14, color: colors.accentDeep, fontFamily: fonts.sansSemiBold, fontWeight: '600' },

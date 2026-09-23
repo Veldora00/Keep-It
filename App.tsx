@@ -15,6 +15,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import GoalOnboardingScreen from './src/screens/GoalOnboardingScreen';
 import DailyCheckIn from './src/components/DailyCheckIn';
+import SubscriptionRecheck from './src/components/SubscriptionRecheck';
 import { colors } from './src/theme/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import SavedScreen from './src/screens/SavedScreen';
@@ -131,6 +132,7 @@ function AuthedApp() {
         </Tab.Navigator>
       </NavigationContainer>
       <DailyCheckIn />
+      <SubscriptionRecheck />
     </>
   );
 }

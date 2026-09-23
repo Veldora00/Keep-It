@@ -182,16 +182,24 @@ export default function SavedScreen() {
   );
 }
 
-const CELL_SIZE = '13.5%';
+// Exactly 1/7 of the row width per cell, with the row itself left-aligned
+// (not space-between). space-between spreads whatever cells ARE present in a
+// line evenly across the full width — fine when a line always has 7 cells,
+// but the last row of a month often has fewer (e.g. just "28, 29, 30"), and
+// space-between then stretches those into different columns than the fixed
+// weekday header above, which is what made day 28 appear to "skip" a column.
+// A fixed 1/7 width with flex-start keeps every cell pinned to its true
+// weekday column regardless of how many cells share the last row.
+const CELL_SIZE = `${100 / 7}%`;
 
 const styles = StyleSheet.create({
   screen: { padding: 18, paddingTop: 20, paddingBottom: 110, maxWidth: 520, width: '100%', alignSelf: 'center' },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   navBtn: { color: colors.accentDeep, fontSize: 13, fontFamily: fonts.sansSemiBold, fontWeight: '600' },
   monthLabel: { fontSize: 13, fontFamily: fonts.sansBold, fontWeight: '700', color: colors.inkDim, textTransform: 'uppercase', letterSpacing: 0.4 },
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  weekRow: { flexDirection: 'row', justifyContent: 'flex-start', marginBottom: 6 },
   weekday: { width: CELL_SIZE, textAlign: 'center', fontSize: 11, fontFamily: fonts.sansBold, fontWeight: '700', color: colors.inkFaint, textTransform: 'uppercase' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', rowGap: 6 },
   cell: { width: CELL_SIZE, aspectRatio: 1 },
   cellBox: {
     borderRadius: 10,

@@ -20,6 +20,10 @@ const FREQUENCY_OPTIONS: HabitFrequency[] = ['daily', 'weekly', 'fortnightly', '
 function goalProjectionDetail(monthlyAmount: number, goal: Goal | null, myLoan: MyLoan | null): string {
   if (goal && goal.type !== 'debt_free') {
     const target = goal.label || 'your goal';
+    if (goal.targetAmount && goal.targetAmount > 0 && monthlyAmount > 0) {
+      const monthsNeeded = Math.ceil(goal.targetAmount / monthlyAmount);
+      return `At this pace, you'll have ${money(goal.targetAmount)} for ${target} in about ${formatTerm(monthsNeeded / 12, true)}.`;
+    }
     return `At this rate, that's ${money(monthlyAmount * 3)} toward ${target} in 3 months, or ${money(monthlyAmount * 12)} in a year.`;
   }
   if (myLoan) {
@@ -263,54 +267,58 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <Field
-            label={habitMode === 'daily' ? `You spend now (per ${freqNoun})` : `Your current plan (per ${freqNoun})`}
-            value={nowStr}
-            onChangeText={(v) => {
-              setNowStr(v);
-              setCutChoice(null);
-            }}
-          />
-
-          <Text style={styles.cutLabel}>
-            {habitMode === 'daily' ? `Try spending (per ${freqNoun})` : `Downgrade to, or cancel (per ${freqNoun})`}
-          </Text>
-          <View style={styles.cutRow}>
-            <Pressable
-              style={[styles.cutBtn, cutChoice === '20' && styles.cutBtnActive]}
-              onPress={() => applyCut(0.2, '20')}
-            >
-              <Text style={[styles.cutBtnText, cutChoice === '20' && styles.cutBtnTextActive]}>20% less</Text>
-              <Text style={[styles.cutBtnAmt, cutChoice === '20' && styles.cutBtnTextActive]}>{money(now * 0.8)}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.cutBtn, cutChoice === '40' && styles.cutBtnActive]}
-              onPress={() => applyCut(0.4, '40')}
-            >
-              <Text style={[styles.cutBtnText, cutChoice === '40' && styles.cutBtnTextActive]}>40% less</Text>
-              <Text style={[styles.cutBtnAmt, cutChoice === '40' && styles.cutBtnTextActive]}>{money(now * 0.6)}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.cutBtn, cutChoice === 'custom' && styles.cutBtnActive]}
-              onPress={() => {
-                setCutChoice('custom');
-                setCutCustomOpen(true);
+          <View style={styles.spendEditor}>
+            <Field
+              label={habitMode === 'daily' ? `You spend now (per ${freqNoun})` : `Your current plan (per ${freqNoun})`}
+              value={nowStr}
+              onChangeText={(v) => {
+                setNowStr(v);
+                setCutChoice(null);
               }}
-            >
-              <Text style={[styles.cutBtnText, cutChoice === 'custom' && styles.cutBtnTextActive]}>Custom</Text>
-              <Text style={[styles.cutBtnAmt, cutChoice === 'custom' && styles.cutBtnTextActive]}>Your number</Text>
-            </Pressable>
-          </View>
+            />
 
-          {cutCustomOpen ? (
-            <Field label={`Your number (per ${freqNoun})`} value={thenStr} onChangeText={setThenStr} />
-          ) : (
-            <Text style={styles.cutPreview}>
-              {saving > 0
-                ? `That's ${money(then)} per ${freqNoun} — a saving of ${money(saving)} per ${freqNoun}.`
-                : `Pick a lower amount above to see your saving.`}
+            <View style={styles.editorDivider} />
+
+            <Text style={styles.cutLabel}>
+              {habitMode === 'daily' ? `Try spending (per ${freqNoun})` : `Downgrade to, or cancel (per ${freqNoun})`}
             </Text>
-          )}
+            <View style={styles.cutRow}>
+              <Pressable
+                style={[styles.cutBtn, cutChoice === '20' && styles.cutBtnActive]}
+                onPress={() => applyCut(0.2, '20')}
+              >
+                <Text style={[styles.cutBtnText, cutChoice === '20' && styles.cutBtnTextActive]}>20% less</Text>
+                <Text style={[styles.cutBtnAmt, cutChoice === '20' && styles.cutBtnTextActive]}>{money(now * 0.8)}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cutBtn, cutChoice === '40' && styles.cutBtnActive]}
+                onPress={() => applyCut(0.4, '40')}
+              >
+                <Text style={[styles.cutBtnText, cutChoice === '40' && styles.cutBtnTextActive]}>40% less</Text>
+                <Text style={[styles.cutBtnAmt, cutChoice === '40' && styles.cutBtnTextActive]}>{money(now * 0.6)}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cutBtn, cutChoice === 'custom' && styles.cutBtnActive]}
+                onPress={() => {
+                  setCutChoice('custom');
+                  setCutCustomOpen(true);
+                }}
+              >
+                <Text style={[styles.cutBtnText, cutChoice === 'custom' && styles.cutBtnTextActive]}>Custom</Text>
+                <Text style={[styles.cutBtnAmt, cutChoice === 'custom' && styles.cutBtnTextActive]}>Your number</Text>
+              </Pressable>
+            </View>
+
+            {cutCustomOpen ? (
+              <Field label={`Your number (per ${freqNoun})`} value={thenStr} onChangeText={setThenStr} />
+            ) : (
+              <Text style={styles.cutPreview}>
+                {saving > 0
+                  ? `That's ${money(then)} per ${freqNoun} — a saving of ${money(saving)} per ${freqNoun}.`
+                  : `Pick a lower amount above to see your saving.`}
+              </Text>
+            )}
+          </View>
 
           <PrimaryButton
             title={selectedHabitKey === 'other' && customName.trim() ? 'Save this custom habit, then track it' : trackBtnLabel}
@@ -451,6 +459,18 @@ const styles = StyleSheet.create({
   habitModeExpenseActiveText: { color: colors.red },
   habitModeIncomeActiveText: { color: colors.accentDeep },
   freqRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 14 },
+  // Groups "you spend now" + "try spending" into one visually distinct block
+  // (its own card, its own background) instead of the two fields just
+  // floating loose against the page — that's what was reading as cramped.
+  spendEditor: {
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    padding: 14,
+    marginBottom: 16,
+  },
+  editorDivider: { height: 1, backgroundColor: colors.line, marginTop: -2, marginBottom: 14 },
   cutLabel: { fontSize: 12.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim, marginBottom: 8, marginTop: 2 },
   cutRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   cutBtn: {

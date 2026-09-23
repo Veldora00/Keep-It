@@ -38,6 +38,9 @@ export type GoalType = 'debt_free' | 'save_for' | 'custom';
 export interface Goal {
   type: GoalType;
   label: string | null; // e.g. "a PS5" for save_for, or the custom goal text
+  // Optional — how much the "save for"/custom goal costs. Lets the app say
+  // "at this pace you'll have $X by [date]" instead of just naming the goal.
+  targetAmount?: number | null;
 }
 export const GOAL_PRESETS: { type: GoalType; label: string; placeholder?: string }[] = [
   { type: 'debt_free', label: 'Be debt-free faster' },
@@ -48,9 +51,10 @@ export const GOAL_PRESETS: { type: GoalType; label: string; placeholder?: string
 // Shared short description of a goal — used anywhere the app names what the
 // user is optimizing for (Tools' "Your goal" card, Home's savings hero, etc).
 export function goalSummary(goal: Goal): string {
+  const amountSuffix = goal.targetAmount ? ` ($${Math.round(goal.targetAmount).toLocaleString('en-AU')})` : '';
   if (goal.type === 'debt_free') return 'Being debt-free faster';
-  if (goal.type === 'save_for') return `Saving for ${goal.label || 'something'}`;
-  return goal.label || 'Something else';
+  if (goal.type === 'save_for') return `Saving for ${goal.label || 'something'}${amountSuffix}`;
+  return `${goal.label || 'Something else'}${amountSuffix}`;
 }
 
 export type DailyLogs = Record<string, Record<string, boolean>>;

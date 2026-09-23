@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, PageTitle } from '../components/ui';
@@ -29,6 +29,7 @@ function ForecastChart({
   color,
   chartW,
   chartH,
+  renderHeight,
   padLeft,
   padRight,
   padBottom,
@@ -37,12 +38,13 @@ function ForecastChart({
   color: string;
   chartW: number;
   chartH: number;
+  renderHeight: number;
   padLeft: number;
   padRight: number;
   padBottom: number;
 }) {
   return (
-    <Svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
+    <Svg width="100%" height={renderHeight} viewBox={`0 0 ${chartW} ${chartH}`}>
       {chart.gridLines.map((v, i) => (
         <React.Fragment key={i}>
           <Line x1={padLeft} x2={chartW - padRight} y1={chart.y(v)} y2={chart.y(v)} stroke={colors.line} strokeWidth={1} />
@@ -96,6 +98,11 @@ function ForecastChart({
 export default function ForecastScreen() {
   const { transactions } = useStore();
   const [months, setMonths] = useState(3);
+  // Two charts side by side only when there's actually room to read them —
+  // on a phone-width screen that squeezes each chart's $ labels unreadable,
+  // so below the breakpoint they stay stacked full-width instead.
+  const { width: windowW } = useWindowDimensions();
+  const sideBySide = windowW >= 700;
 
   const recurring = useMemo(() => transactions.filter((t) => t.recurring), [transactions]);
   const currentBalance = useMemo(
@@ -138,6 +145,17 @@ export default function ForecastScreen() {
   const PAD_TOP = 26;
   const PAD_BOTTOM = 30;
 
+  // The SVG's viewBox is a fixed 400x220 (coordinates for the chart math
+  // above), but its actual rendered pixel size needs to match whatever room
+  // it really has — full card width when stacked, half when side by side —
+  // or it renders squashed/stretched instead of keeping its shape.
+  const SCREEN_PAD = 36; // 18 either side, see `screen` style below
+  const CARD_PAD = 40; // 20 either side, see Card's own style
+  const GAP = 14;
+  const contentW = Math.min(windowW, 520) - SCREEN_PAD;
+  const chartAreaW = sideBySide ? (contentW - GAP) / 2 - CARD_PAD : contentW - CARD_PAD;
+  const renderedChartH = Math.round(chartAreaW * (CHART_H / CHART_W));
+
   const chart = useMemo(() => buildChartData(points, CHART_W, CHART_H, PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM), [points]);
   const savingsChart = useMemo(
     () => buildChartData(savingsPoints, CHART_W, CHART_H, PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM),
@@ -168,17 +186,41 @@ export default function ForecastScreen() {
         ))}
       </View>
 
-      <Text style={styles.sectionLabel}>Overall balance</Text>
-      <Card>
-        <ForecastChart chart={chart} color="#1E9E82" chartW={CHART_W} chartH={CHART_H} padLeft={PAD_LEFT} padRight={PAD_RIGHT} padBottom={PAD_BOTTOM} />
-        <Text style={styles.note}>{note}</Text>
-      </Card>
+      <View style={sideBySide ? styles.chartsRow : undefined}>
+        <View style={sideBySide ? styles.chartsHalf : undefined}>
+          <Text style={styles.sectionLabel}>Overall balance</Text>
+          <Card>
+            <ForecastChart
+              chart={chart}
+              color="#1E9E82"
+              chartW={CHART_W}
+              chartH={CHART_H}
+              renderHeight={renderedChartH}
+              padLeft={PAD_LEFT}
+              padRight={PAD_RIGHT}
+              padBottom={PAD_BOTTOM}
+            />
+            <Text style={styles.note}>{note}</Text>
+          </Card>
+        </View>
 
-      <Text style={styles.sectionLabel}>Money saved by your habits</Text>
-      <Card>
-        <ForecastChart chart={savingsChart} color="#1E9E82" chartW={CHART_W} chartH={CHART_H} padLeft={PAD_LEFT} padRight={PAD_RIGHT} padBottom={PAD_BOTTOM} />
-        <Text style={styles.note}>{savingsNote}</Text>
-      </Card>
+        <View style={sideBySide ? styles.chartsHalf : undefined}>
+          <Text style={styles.sectionLabel}>Money saved by your habits</Text>
+          <Card>
+            <ForecastChart
+              chart={savingsChart}
+              color="#1E9E82"
+              chartW={CHART_W}
+              chartH={CHART_H}
+              renderHeight={renderedChartH}
+              padLeft={PAD_LEFT}
+              padRight={PAD_RIGHT}
+              padBottom={PAD_BOTTOM}
+            />
+            <Text style={styles.note}>{savingsNote}</Text>
+          </Card>
+        </View>
+      </View>
 
       <Text style={styles.sectionLabel}>Recurring items counted</Text>
       {recurring.length === 0 ? (
@@ -216,6 +258,8 @@ const styles = StyleSheet.create({
   rangeBtnText: { fontSize: 13.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
   rangeBtnActiveText: { color: '#fff' },
   note: { fontSize: 13, color: colors.inkFaint, lineHeight: 20, marginTop: 6 },
+  chartsRow: { flexDirection: 'row', gap: 14 },
+  chartsHalf: { flex: 1, minWidth: 0 },
   sectionLabel: {
     fontSize: 13,
     fontFamily: fonts.sansBold,
