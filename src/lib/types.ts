@@ -32,6 +32,19 @@ export interface MyLoan {
   term: number;
 }
 
+// What the user told the onboarding question they're optimizing cash flow
+// for — used to tailor the copy the app shows them, nothing more.
+export type GoalType = 'debt_free' | 'save_for' | 'custom';
+export interface Goal {
+  type: GoalType;
+  label: string | null; // e.g. "a PS5" for save_for, or the custom goal text
+}
+export const GOAL_PRESETS: { type: GoalType; label: string; placeholder?: string }[] = [
+  { type: 'debt_free', label: 'Be debt-free faster' },
+  { type: 'save_for', label: 'Save for something', placeholder: 'e.g. a PS5, a phone, a holiday' },
+  { type: 'custom', label: 'Something else', placeholder: "What's the goal?" },
+];
+
 export type DailyLogs = Record<string, Record<string, boolean>>;
 
 export const EXPENSE_CATEGORIES = [

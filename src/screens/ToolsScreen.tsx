@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts, radii } from '../theme/theme';
-import { Chip, PageTitle, SectionLabel } from '../components/ui';
+import { Card, Chip, PageTitle, SectionLabel } from '../components/ui';
+import GoalPicker from '../components/GoalPicker';
 import { useAuth } from '../lib/auth';
 import { useStore } from '../lib/store';
 import { appNow } from '../lib/calculations';
+import { Goal } from '../lib/types';
 import GrowthCalc from './tools/GrowthCalc';
 import LoanPayoffCalc from './tools/LoanPayoffCalc';
 import BorrowCalc from './tools/BorrowCalc';
 import TaxCalc from './tools/TaxCalc';
+
+function goalSummary(goal: Goal): string {
+  if (goal.type === 'debt_free') return 'Being debt-free faster';
+  if (goal.type === 'save_for') return `Saving for ${goal.label || 'something'}`;
+  return goal.label || 'Something else';
+}
 
 const TABS = [
   { key: 'loan', label: 'Loan payoff' },
@@ -20,7 +28,8 @@ const TABS = [
 export default function ToolsScreen() {
   const [tab, setTab] = useState('loan');
   const { session, signOut } = useAuth();
-  const { canFastForward, dayOffset, setDayOffset } = useStore();
+  const { canFastForward, dayOffset, setDayOffset, goal, saveGoal } = useStore();
+  const [goalEditorOpen, setGoalEditorOpen] = useState(false);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.paperWarm }} contentContainerStyle={styles.screen}>
@@ -35,6 +44,33 @@ export default function ToolsScreen() {
       {tab === 'borrow' ? <BorrowCalc /> : null}
       {tab === 'tax' ? <TaxCalc /> : null}
       {tab === 'growth' ? <GrowthCalc /> : null}
+
+      <SectionLabel>Your goal</SectionLabel>
+      <Card style={styles.goalCard}>
+        <Text style={styles.goalText}>{goal ? goalSummary(goal) : 'Not set'}</Text>
+        <Pressable onPress={() => setGoalEditorOpen(true)}>
+          <Text style={styles.goalEdit}>Edit</Text>
+        </Pressable>
+      </Card>
+
+      <Modal visible={goalEditorOpen} animationType="slide" transparent onRequestClose={() => setGoalEditorOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>What are you optimizing for?</Text>
+            <GoalPicker
+              initialGoal={goal}
+              saveLabel="Save"
+              onSave={(g) => {
+                saveGoal(g);
+                setGoalEditorOpen(false);
+              }}
+            />
+            <Pressable onPress={() => setGoalEditorOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {canFastForward ? (
         <>
@@ -76,4 +112,12 @@ const styles = StyleSheet.create({
   email: { fontSize: 13.5, color: colors.inkDim, fontFamily: fonts.sans, marginBottom: 12 },
   signOutBtn: { borderWidth: 1, borderColor: colors.lineStrong, borderRadius: radii.sm, paddingVertical: 13, alignItems: 'center', marginBottom: 20 },
   signOutText: { color: colors.red, fontFamily: fonts.sansSemiBold, fontWeight: '600', fontSize: 14.5 },
+  goalCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, marginBottom: 20 },
+  goalText: { fontSize: 14.5, color: colors.ink, fontFamily: fonts.sansSemiBold, fontWeight: '600', flexShrink: 1, paddingRight: 12 },
+  goalEdit: { fontSize: 14, color: colors.accentDeep, fontFamily: fonts.sansSemiBold, fontWeight: '600' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: colors.paper, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg, padding: 22, paddingBottom: 32 },
+  modalTitle: { fontFamily: fonts.serif, fontSize: 18, color: colors.ink, marginBottom: 16 },
+  modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+  modalCancelText: { color: colors.inkDim, fontFamily: fonts.sans, fontSize: 14 },
 });

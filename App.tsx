@@ -9,10 +9,11 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, Fraunces_400Regular, Fraunces_500Medium, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
-import { StoreProvider } from './src/lib/store';
+import { StoreProvider, useStore } from './src/lib/store';
 import { AuthProvider, useAuth } from './src/lib/auth';
 import AuthScreen from './src/screens/AuthScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
+import GoalOnboardingScreen from './src/screens/GoalOnboardingScreen';
 import DailyCheckIn from './src/components/DailyCheckIn';
 import { colors } from './src/theme/theme';
 import HomeScreen from './src/screens/HomeScreen';
@@ -87,6 +88,31 @@ function AppGate() {
 
   return (
     <StoreProvider>
+      <AuthedApp />
+    </StoreProvider>
+  );
+}
+
+// Split out so it can read the store — gates on the goal question being
+// answered before anything else in the app renders, so every screen after
+// this point has a goal to point its copy at.
+function AuthedApp() {
+  const { ready, goal } = useStore();
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paperWarm }}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!goal) {
+    return <GoalOnboardingScreen />;
+  }
+
+  return (
+    <>
       <NavigationContainer>
         <Tab.Navigator
           screenOptions={({ route }) => ({
@@ -105,6 +131,6 @@ function AppGate() {
         </Tab.Navigator>
       </NavigationContainer>
       <DailyCheckIn />
-    </StoreProvider>
+    </>
   );
 }

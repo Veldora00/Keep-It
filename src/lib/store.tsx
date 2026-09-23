@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
-import { CustomHabit, CustomHabits, DailyLogs, HabitMode, MyLoan, Transaction } from './types';
+import { CustomHabit, CustomHabits, DailyLogs, Goal, HabitMode, MyLoan, Transaction } from './types';
 import { FASTFORWARD_TEST_EMAIL, setDayOffset as setGlobalDayOffset, todayKey } from './calculations';
 
 // Legacy unscoped keys — this is where data lived before accounts existed.
@@ -11,6 +11,7 @@ const LEGACY_TX_KEY = 'keepit_transactions';
 const LEGACY_CH_KEY = 'keepit_custom_habits';
 const LEGACY_DL_KEY = 'keepit_daily_logs';
 const LEGACY_ML_KEY = 'keepit_myloan';
+const LEGACY_GOAL_KEY = 'keepit_goal';
 
 function scopedKey(base: string, userId: string) {
   return `${base}:${userId}`;
@@ -33,6 +34,10 @@ interface Store {
   myLoan: MyLoan | null;
   saveMyLoan: (loan: MyLoan) => void;
   removeMyLoan: () => void;
+  // What the onboarding question said the user is optimizing cash flow for.
+  // null only until they've answered it once — the app gates on this.
+  goal: Goal | null;
+  saveGoal: (goal: Goal) => void;
   habitTrackKey: (key: string, mode: HabitMode, label: string) => string;
   isHabitTracked: (key: string, mode: HabitMode, label: string) => boolean;
   trackHabit: (opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => void;
@@ -80,6 +85,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [customHabits, setCustomHabits] = useState<CustomHabits>({ daily: [], subscription: [] });
   const [dailyLogs, setDailyLogs] = useState<DailyLogs>({});
   const [myLoan, setMyLoan] = useState<MyLoan | null>(null);
+  const [goal, setGoal] = useState<Goal | null>(null);
   const [dayOffset, setDayOffsetState] = useState(0);
 
   // Only the designated test account ever gets a non-zero offset, and it's
@@ -120,6 +126,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setCustomHabits({ daily: [], subscription: [] });
       setDailyLogs({});
       setMyLoan(null);
+      setGoal(null);
       setReady(false);
       return;
     }
@@ -135,11 +142,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           await AsyncStorage.setItem(migratedFlagKey(userId), 'true');
         }
 
-        const [{ data: txRows }, { data: chRows }, { data: dlRows }, { data: mlRows }] = await Promise.all([
+        const [{ data: txRows }, { data: chRows }, { data: dlRows }, { data: mlRows }, { data: goalRow }] = await Promise.all([
           supabase.from('keepit_transactions').select('*').order('date', { ascending: false }),
           supabase.from('keepit_custom_habits').select('*'),
           supabase.from('keepit_daily_logs').select('*'),
           supabase.from('keepit_myloan').select('*').maybeSingle(),
+          supabase.from('keepit_goal').select('*').maybeSingle(),
         ]);
 
         if (cancelled) return;
@@ -156,11 +164,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           nextDl[r.date_key][r.track_key] = !!r.tracked;
         });
         const nextMl: MyLoan | null = mlRows ? { balance: Number(mlRows.balance), rate: Number(mlRows.rate), term: Number(mlRows.term) } : null;
+        const nextGoal: Goal | null = goalRow ? { type: goalRow.goal_type, label: goalRow.goal_label ?? null } : null;
 
         setTransactions(nextTx);
         setCustomHabits(nextCh);
         setDailyLogs(nextDl);
         setMyLoan(nextMl);
+        setGoal(nextGoal);
 
         await Promise.all([
           AsyncStorage.setItem(scopedKey(LEGACY_TX_KEY, userId), JSON.stringify(nextTx)),
@@ -169,21 +179,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           nextMl
             ? AsyncStorage.setItem(scopedKey(LEGACY_ML_KEY, userId), JSON.stringify(nextMl))
             : AsyncStorage.removeItem(scopedKey(LEGACY_ML_KEY, userId)),
+          nextGoal
+            ? AsyncStorage.setItem(scopedKey(LEGACY_GOAL_KEY, userId), JSON.stringify(nextGoal))
+            : AsyncStorage.removeItem(scopedKey(LEGACY_GOAL_KEY, userId)),
         ]);
       } catch (e) {
         // Cloud fetch failed (offline, etc) — fall back to this device's last synced cache.
         try {
-          const [txRaw, chRaw, dlRaw, mlRaw] = await Promise.all([
+          const [txRaw, chRaw, dlRaw, mlRaw, goalRaw] = await Promise.all([
             AsyncStorage.getItem(scopedKey(LEGACY_TX_KEY, userId)),
             AsyncStorage.getItem(scopedKey(LEGACY_CH_KEY, userId)),
             AsyncStorage.getItem(scopedKey(LEGACY_DL_KEY, userId)),
             AsyncStorage.getItem(scopedKey(LEGACY_ML_KEY, userId)),
+            AsyncStorage.getItem(scopedKey(LEGACY_GOAL_KEY, userId)),
           ]);
           if (!cancelled) {
             if (txRaw) setTransactions(JSON.parse(txRaw));
             if (chRaw) setCustomHabits(JSON.parse(chRaw));
             if (dlRaw) setDailyLogs(JSON.parse(dlRaw));
             if (mlRaw) setMyLoan(JSON.parse(mlRaw));
+            if (goalRaw) setGoal(JSON.parse(goalRaw));
           }
         } catch {
           // best effort
@@ -330,6 +345,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId]);
 
+  const saveGoalFn = useCallback(
+    (g: Goal) => {
+      setGoal(g);
+      if (userId) {
+        AsyncStorage.setItem(scopedKey(LEGACY_GOAL_KEY, userId), JSON.stringify(g)).catch(() => {});
+        supabase
+          .from('keepit_goal')
+          .upsert({ user_id: userId, goal_type: g.type, goal_label: g.label, updated_at: new Date().toISOString() })
+          .then(() => {});
+      }
+    },
+    [userId]
+  );
+
   const habitTrackKey = useCallback(habitTrackKeyFn, []);
 
   const isHabitTracked = useCallback(
@@ -393,6 +422,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       myLoan,
       saveMyLoan: saveMyLoanFn,
       removeMyLoan,
+      goal,
+      saveGoal: saveGoalFn,
       habitTrackKey,
       isHabitTracked,
       trackHabit,
@@ -413,6 +444,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       myLoan,
       saveMyLoanFn,
       removeMyLoan,
+      goal,
+      saveGoalFn,
       habitTrackKey,
       isHabitTracked,
       trackHabit,
