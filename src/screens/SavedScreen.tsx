@@ -4,6 +4,7 @@ import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, HeroResult, PageTitle } from '../components/ui';
 import { useStore } from '../lib/store';
 import { appNow, computeExtraImpact, computeStreak, earnedTrophies, money, nextTrophy, todayKey, TROPHY_MILESTONES } from '../lib/calculations';
+import { SectionLabel } from '../components/ui';
 
 function dateKey(y: number, m: number, d: number) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -21,6 +22,14 @@ export default function SavedScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const dailyHabits = useMemo(() => transactions.filter((t) => t.habitTrackKey && t.habitTrackKey.endsWith(':daily')), [transactions]);
+  // Subscriptions (Netflix etc) never had a home on this screen — the
+  // calendar only ever tracked everyday habits day by day, since a
+  // subscription isn't something you "do" daily. That made it look like
+  // subscriptions weren't being tracked at all. This lists them separately.
+  const subscriptionHabits = useMemo(
+    () => transactions.filter((t) => t.habitTrackKey && t.habitTrackKey.includes(':subscription')),
+    [transactions]
+  );
   const streak = useMemo(
     () => computeStreak(dailyLogs, dailyHabits.map((t) => t.habitTrackKey!)),
     [dailyLogs, dailyHabits]
@@ -98,6 +107,29 @@ export default function SavedScreen() {
             </View>
           ) : null}
         </Card>
+      )}
+
+      {subscriptionHabits.length > 0 && (
+        <>
+          <SectionLabel>Your subscriptions</SectionLabel>
+          <Card style={{ marginBottom: 18 }}>
+            {subscriptionHabits.map((t) => {
+              const { icon, name } = splitHabitIcon(t.name.replace(/\s*\((new plan|cancelled)\)$/, ''));
+              return (
+                <View key={t.id} style={styles.subRow}>
+                  <Text style={styles.habitRowName}>
+                    {icon} {name}
+                  </Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.subAmount}>{money(t.amount)}/mo</Text>
+                    {t.habitSaving ? <Text style={styles.subSaving}>saving {money(t.habitSaving)}/mo</Text> : null}
+                  </View>
+                </View>
+              );
+            })}
+            <Text style={styles.subHint}>These don't get a daily check-off — instead we periodically ask if the price has changed.</Text>
+          </Card>
+        </>
       )}
 
       {dailyHabits.length === 0 ? (
@@ -219,6 +251,10 @@ const styles = StyleSheet.create({
   habitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: colors.line },
   habitRowName: { fontSize: 14.5, color: colors.ink },
   habitRowCheck: { fontSize: 13, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkFaint },
+  subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
+  subAmount: { fontSize: 14, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.ink },
+  subSaving: { fontSize: 11.5, color: colors.accentDeep, marginTop: 2 },
+  subHint: { fontSize: 11.5, color: colors.inkFaint, marginTop: 10, lineHeight: 15 },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   streakFlame: { fontSize: 30 },
   streakNum: { fontFamily: fonts.serif, fontSize: 18, color: colors.ink },

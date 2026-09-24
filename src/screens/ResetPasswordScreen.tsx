@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { Alert } from '../lib/alert';
 import { colors, fonts } from '../theme/theme';
 import { Field } from '../components/fields';
 import { PrimaryButton } from '../components/ui';

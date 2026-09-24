@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert } from '../lib/alert';
 import { colors, fonts, radii } from '../theme/theme';
 import { Field, SelectField, CheckRow } from './fields';
 import { PrimaryButton, TypeToggle } from './ui';

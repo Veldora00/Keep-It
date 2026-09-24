@@ -16,6 +16,7 @@ import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import GoalOnboardingScreen from './src/screens/GoalOnboardingScreen';
 import DailyCheckIn from './src/components/DailyCheckIn';
 import SubscriptionRecheck from './src/components/SubscriptionRecheck';
+import { GlobalAlertHost } from './src/lib/alert';
 import { colors } from './src/theme/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import SavedScreen from './src/screens/SavedScreen';
@@ -59,6 +60,7 @@ export default function App() {
       <AuthProvider>
         <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
           <AppGate />
+          <GlobalAlertHost />
           <StatusBar style="dark" />
         </View>
       </AuthProvider>

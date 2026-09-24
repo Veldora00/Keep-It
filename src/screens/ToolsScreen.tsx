@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert } from '../lib/alert';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, Chip, PageTitle, SectionLabel } from '../components/ui';
 import GoalPicker from '../components/GoalPicker';

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, PageTitle } from '../components/ui';
@@ -101,8 +101,11 @@ export default function ForecastScreen() {
   // Two charts side by side only when there's actually room to read them —
   // on a phone-width screen that squeezes each chart's $ labels unreadable,
   // so below the breakpoint they stay stacked full-width instead.
-  const { width: windowW } = useWindowDimensions();
+  const { width: windowW, height: windowH } = useWindowDimensions();
   const sideBySide = windowW >= 700;
+  // Tapping a chart (especially cramped in the side-by-side layout) opens it
+  // full-screen instead — a real "look closer" view, not just a bigger card.
+  const [expanded, setExpanded] = useState<'balance' | 'savings' | null>(null);
 
   const recurring = useMemo(() => transactions.filter((t) => t.recurring), [transactions]);
   const currentBalance = useMemo(
@@ -156,6 +159,12 @@ export default function ForecastScreen() {
   const chartAreaW = sideBySide ? (contentW - GAP) / 2 - CARD_PAD : contentW - CARD_PAD;
   const renderedChartH = Math.round(chartAreaW * (CHART_H / CHART_W));
 
+  // The full-screen view gets the whole window width to work with (minus its
+  // own card), capped so it never blows past a sensible chunk of the
+  // screen's height on a short/landscape phone.
+  const expandedAreaW = windowW - SCREEN_PAD - CARD_PAD;
+  const expandedRenderedH = Math.min(Math.round(expandedAreaW * (CHART_H / CHART_W)), Math.round(windowH * 0.5));
+
   const chart = useMemo(() => buildChartData(points, CHART_W, CHART_H, PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM), [points]);
   const savingsChart = useMemo(
     () => buildChartData(savingsPoints, CHART_W, CHART_H, PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM),
@@ -189,38 +198,70 @@ export default function ForecastScreen() {
       <View style={sideBySide ? styles.chartsRow : undefined}>
         <View style={sideBySide ? styles.chartsHalf : undefined}>
           <Text style={styles.sectionLabel}>Overall balance</Text>
-          <Card>
-            <ForecastChart
-              chart={chart}
-              color="#1E9E82"
-              chartW={CHART_W}
-              chartH={CHART_H}
-              renderHeight={renderedChartH}
-              padLeft={PAD_LEFT}
-              padRight={PAD_RIGHT}
-              padBottom={PAD_BOTTOM}
-            />
-            <Text style={styles.note}>{note}</Text>
-          </Card>
+          <Pressable onPress={() => setExpanded('balance')}>
+            <Card>
+              <ForecastChart
+                chart={chart}
+                color="#1E9E82"
+                chartW={CHART_W}
+                chartH={CHART_H}
+                renderHeight={renderedChartH}
+                padLeft={PAD_LEFT}
+                padRight={PAD_RIGHT}
+                padBottom={PAD_BOTTOM}
+              />
+              <Text style={styles.note}>{note}</Text>
+              <Text style={styles.expandHint}>Tap to view full-screen ⤢</Text>
+            </Card>
+          </Pressable>
         </View>
 
         <View style={sideBySide ? styles.chartsHalf : undefined}>
           <Text style={styles.sectionLabel}>Money saved by your habits</Text>
-          <Card>
-            <ForecastChart
-              chart={savingsChart}
-              color="#1E9E82"
-              chartW={CHART_W}
-              chartH={CHART_H}
-              renderHeight={renderedChartH}
-              padLeft={PAD_LEFT}
-              padRight={PAD_RIGHT}
-              padBottom={PAD_BOTTOM}
-            />
-            <Text style={styles.note}>{savingsNote}</Text>
-          </Card>
+          <Pressable onPress={() => setExpanded('savings')}>
+            <Card>
+              <ForecastChart
+                chart={savingsChart}
+                color="#1E9E82"
+                chartW={CHART_W}
+                chartH={CHART_H}
+                renderHeight={renderedChartH}
+                padLeft={PAD_LEFT}
+                padRight={PAD_RIGHT}
+                padBottom={PAD_BOTTOM}
+              />
+              <Text style={styles.note}>{savingsNote}</Text>
+              <Text style={styles.expandHint}>Tap to view full-screen ⤢</Text>
+            </Card>
+          </Pressable>
         </View>
       </View>
+
+      <Modal visible={!!expanded} transparent animationType="fade" onRequestClose={() => setExpanded(null)}>
+        <Pressable style={styles.expandOverlay} onPress={() => setExpanded(null)}>
+          <Pressable style={styles.expandSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.expandHeader}>
+              <Text style={styles.expandTitle}>{expanded === 'balance' ? 'Overall balance' : 'Money saved by your habits'}</Text>
+              <Pressable onPress={() => setExpanded(null)} hitSlop={10}>
+                <Text style={styles.expandClose}>✕</Text>
+              </Pressable>
+            </View>
+            {expanded ? (
+              <ForecastChart
+                chart={expanded === 'balance' ? chart : savingsChart}
+                color="#1E9E82"
+                chartW={CHART_W}
+                chartH={CHART_H}
+                renderHeight={expandedRenderedH}
+                padLeft={PAD_LEFT}
+                padRight={PAD_RIGHT}
+                padBottom={PAD_BOTTOM}
+              />
+            ) : null}
+            <Text style={styles.note}>{expanded === 'balance' ? note : savingsNote}</Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Text style={styles.sectionLabel}>Recurring items counted</Text>
       {recurring.length === 0 ? (
@@ -258,8 +299,14 @@ const styles = StyleSheet.create({
   rangeBtnText: { fontSize: 13.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
   rangeBtnActiveText: { color: '#fff' },
   note: { fontSize: 13, color: colors.inkFaint, lineHeight: 20, marginTop: 6 },
+  expandHint: { fontSize: 11, color: colors.inkFaint, marginTop: 10, textAlign: 'center' },
   chartsRow: { flexDirection: 'row', gap: 14 },
   chartsHalf: { flex: 1, minWidth: 0 },
+  expandOverlay: { flex: 1, backgroundColor: 'rgba(22,26,32,0.6)', justifyContent: 'center', padding: 16 },
+  expandSheet: { backgroundColor: colors.paper, borderRadius: radii.xl, padding: 18, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  expandHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  expandTitle: { fontFamily: fonts.serif, fontSize: 17, color: colors.ink },
+  expandClose: { fontSize: 18, color: colors.inkFaint, paddingHorizontal: 6 },
   sectionLabel: {
     fontSize: 13,
     fontFamily: fonts.sansBold,
