@@ -7,24 +7,48 @@ import AddTransactionSheet from '../components/AddTransactionSheet';
 import LoanSheet from '../components/LoanSheet';
 import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
-import { computeExtraImpact, formatTerm, money, monthlyEquivalent, round2, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
+import { appNow, computeExtraImpact, formatTerm, money, monthlyEquivalent, round2, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
 import { Goal, HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, MyLoan, SUBSCRIPTIONS, Transaction } from '../lib/types';
 
 type HabitFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly';
 const FREQUENCY_OPTIONS: HabitFrequency[] = ['daily', 'weekly', 'fortnightly', 'monthly'];
 
+// "In about 4 months" hides that you're not starting from zero — this spells
+// out the remaining time down to the day, not just the nearest month.
+function formatMonthsDays(totalMonths: number): string {
+  const totalDays = Math.max(0, Math.round(totalMonths * 30));
+  const months = Math.floor(totalDays / 30);
+  const days = totalDays % 30;
+  if (months <= 0) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days === 0) return `${months} month${months === 1 ? '' : 's'}`;
+  return `${months} month${months === 1 ? '' : 's'} and ${days} day${days === 1 ? '' : 's'}`;
+}
+
 // Debt-free (or no goal answered yet) keeps the loan-payoff framing; any
 // other goal cares about a savings pile, not interest saved, so it gets a
-// simple "here's what you'd have, and when" projection toward that goal
-// instead.
-function goalProjectionDetail(monthlyAmount: number, goal: Goal | null, myLoan: MyLoan | null): string {
+// simple "here's what you've saved, and when you'll get there" projection
+// toward that goal instead — `savedSoFar` is what's actually accrued from
+// tracked habits to date, not just the future pace.
+function goalProjectionDetail(monthlyAmount: number, goal: Goal | null, myLoan: MyLoan | null, savedSoFar: number): string {
   if (goal && goal.type !== 'debt_free') {
     const target = goal.label || 'your goal';
-    if (goal.targetAmount && goal.targetAmount > 0 && monthlyAmount > 0) {
-      const monthsNeeded = Math.ceil(goal.targetAmount / monthlyAmount);
-      return `At this pace, you'll have ${money(goal.targetAmount)} for ${target} in about ${formatTerm(monthsNeeded / 12, true)}.`;
+    if (goal.targetAmount && goal.targetAmount > 0) {
+      const remaining = Math.max(0, goal.targetAmount - savedSoFar);
+      if (remaining <= 0) {
+        return `You've saved ${money(savedSoFar)} — that's enough for ${target}!`;
+      }
+      if (monthlyAmount > 0) {
+        const monthsNeeded = remaining / monthlyAmount;
+        return `You've saved ${money(savedSoFar)} so far. At this pace, you'll have ${money(goal.targetAmount)} for ${target} in about ${formatMonthsDays(
+          monthsNeeded
+        )}.`;
+      }
+      return `You've saved ${money(savedSoFar)} toward ${target} so far — ${money(remaining)} to go once you track a habit.`;
     }
-    return `At this rate, that's ${money(monthlyAmount * 3)} toward ${target} in 3 months, or ${money(monthlyAmount * 12)} in a year.`;
+    if (monthlyAmount > 0) {
+      return `At this rate, that's ${money(monthlyAmount * 3)} toward ${target} in 3 months, or ${money(monthlyAmount * 12)} in a year.`;
+    }
+    return savedSoFar > 0 ? `You've saved ${money(savedSoFar)} toward ${target} so far.` : `Track a habit to start saving toward ${target}.`;
   }
   if (myLoan) {
     const impact = computeExtraImpact(myLoan.balance, myLoan.rate, myLoan.term, 0, monthlyAmount, 'monthly');
@@ -63,9 +87,10 @@ function trackedOverride(mode: HabitMode, key: string, transactions: Transaction
 
 export default function HomeScreen() {
   const store = useStore();
-  const { transactions, myLoan, customHabits, deleteTransaction, goal } = store;
+  const { transactions, dailyLogs, myLoan, customHabits, deleteTransaction, goal } = store;
 
   const [txSheetOpen, setTxSheetOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [loanSheetOpen, setLoanSheetOpen] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
   const [trackedImpact, setTrackedImpact] = useState<TrackedImpact | null>(null);
@@ -142,6 +167,26 @@ export default function HomeScreen() {
   const label = currentHabitLabel();
   const tracked = store.isHabitTracked(selectedHabitKey, habitMode, label);
 
+  // What's actually accrued so far from tracked habits — daily habits count
+  // each day actually logged done; subscriptions accrue continuously since
+  // the day they were tracked. This is what makes the goal projection say
+  // "you've saved $X so far" instead of projecting from zero every time.
+  const lifetimeSaved = useMemo(() => {
+    const now = appNow().getTime();
+    let total = 0;
+    for (const t of transactions) {
+      if (!t.habitTrackKey || !t.habitSaving) continue;
+      if (t.habitTrackKey.endsWith(':daily')) {
+        const daysLogged = Object.values(dailyLogs).filter((day) => day[t.habitTrackKey!]).length;
+        total += daysLogged * (t.habitSaving / 30);
+      } else {
+        const elapsedDays = Math.max(0, (now - new Date(t.date).getTime()) / 86400000);
+        total += elapsedDays * (t.habitSaving / 30);
+      }
+    }
+    return round2(total);
+  }, [transactions, dailyLogs]);
+
   const habitDetail = useMemo(() => {
     if (saving <= 0) {
       return habitNone
@@ -150,8 +195,8 @@ export default function HomeScreen() {
         ? 'Try spending less than you do now to see the saving.'
         : 'Pick a cheaper plan (or $0 to cancel) to see the saving.';
     }
-    return goalProjectionDetail(monthlySaving, goal, myLoan);
-  }, [saving, habitNone, habitMode, monthlySaving, myLoan, goal]);
+    return goalProjectionDetail(monthlySaving, goal, myLoan, lifetimeSaved);
+  }, [saving, habitNone, habitMode, monthlySaving, myLoan, goal, lifetimeSaved]);
 
   // ---------- Combined "You're saving" hero ----------
   const savingsHero = useMemo(() => {
@@ -160,9 +205,9 @@ export default function HomeScreen() {
     const previewCounts = !tracked && monthlySaving > 0 && !(selectedHabitKey === 'other' && !customName.trim());
     const total = trackedTotal + (previewCounts ? monthlySaving : 0);
     if (total <= 0) return null;
-    const detail = goalProjectionDetail(total, goal, myLoan);
+    const detail = goalProjectionDetail(total, goal, myLoan, lifetimeSaved);
     return { total, detail };
-  }, [transactions, tracked, monthlySaving, selectedHabitKey, customName, myLoan, goal]);
+  }, [transactions, tracked, monthlySaving, selectedHabitKey, customName, myLoan, goal, lifetimeSaved]);
 
   function trackHabit() {
     if (habitNone) return;
@@ -379,12 +424,20 @@ export default function HomeScreen() {
         </View>
 
         <SectionLabelRow label="Recent" action={transactions.length > 5 ? (showAllRecent ? 'Show less' : 'Show all') : undefined} onPress={() => setShowAllRecent(!showAllRecent)} />
+        {transactions.length > 0 ? <Text style={styles.editHint}>Tap any transaction to edit it — like when your salary changes.</Text> : null}
         {transactions.length === 0 ? (
           <EmptyState small text="Nothing added yet — tap + to log your first transaction" />
         ) : (
           <View>
             {recentList.map((t) => (
-              <View key={t.id} style={styles.txItem}>
+              <Pressable
+                key={t.id}
+                style={styles.txItem}
+                onPress={() => {
+                  setEditingTx(t);
+                  setTxSheetOpen(true);
+                }}
+              >
                 <View style={[styles.txIcon, { backgroundColor: t.type === 'income' ? colors.accentSoft : colors.redSoft }]}>
                   <Text>{t.type === 'income' ? '↓' : '↑'}</Text>
                 </View>
@@ -399,10 +452,16 @@ export default function HomeScreen() {
                   {t.type === 'income' ? '+' : '-'}
                   {money(t.amount)}
                 </Text>
-                <Pressable onPress={() => deleteTransaction(t.id)} hitSlop={8}>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    deleteTransaction(t.id);
+                  }}
+                  hitSlop={8}
+                >
                   <Text style={styles.txDelete}>×</Text>
                 </Pressable>
-              </View>
+              </Pressable>
             ))}
           </View>
         )}
@@ -441,7 +500,14 @@ export default function HomeScreen() {
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
-      <AddTransactionSheet visible={txSheetOpen} onClose={() => setTxSheetOpen(false)} />
+      <AddTransactionSheet
+        visible={txSheetOpen}
+        editingTx={editingTx}
+        onClose={() => {
+          setTxSheetOpen(false);
+          setEditingTx(null);
+        }}
+      />
       <LoanSheet visible={loanSheetOpen} onClose={() => setLoanSheetOpen(false)} />
       <TrackedImpactModal visible={!!trackedImpact} data={trackedImpact} onClose={() => setTrackedImpact(null)} />
     </View>
@@ -519,6 +585,7 @@ const styles = StyleSheet.create({
   txMeta: { fontSize: 12, color: colors.inkFaint, marginTop: 2 },
   txAmt: { fontSize: 14.5, fontFamily: fonts.sansSemiBold, fontWeight: '600' },
   txDelete: { color: colors.inkFaint, fontSize: 20, paddingHorizontal: 6 },
+  editHint: { fontSize: 11.5, color: colors.inkFaint, marginTop: -6, marginBottom: 10 },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   catDot: { width: 10, height: 10, borderRadius: 5 },
   catName: { flex: 1, fontSize: 14.5, color: colors.ink },

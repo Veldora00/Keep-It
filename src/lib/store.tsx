@@ -25,6 +25,11 @@ interface Store {
   ready: boolean;
   transactions: Transaction[];
   addTransaction: (tx: Transaction) => void;
+  // Edits a transaction in place (same id) — e.g. your salary changed, or
+  // you mistyped an amount. Previously the only option was delete-and-re-add,
+  // which for a recurring item like a salary meant redoing name/category/
+  // frequency every time just to fix one number.
+  updateTransaction: (tx: Transaction) => void;
   deleteTransaction: (id: number) => void;
   adjustHabitTarget: (habitTrackKey: string, newAmount: number, newMonthlySaving: number) => void;
   customHabits: CustomHabits;
@@ -260,6 +265,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [transactions, cacheTx, userId]
   );
 
+  const updateTransaction = useCallback(
+    (tx: Transaction) => {
+      const next = transactions.map((t) => (t.id === tx.id ? { ...t, ...tx } : t));
+      setTransactions(next);
+      cacheTx(next);
+      if (userId) {
+        supabase
+          .from('keepit_transactions')
+          .update({
+            name: tx.name,
+            amount: tx.amount,
+            category: tx.category,
+            recurring: tx.recurring,
+            frequency: tx.frequency,
+            type: tx.type,
+          })
+          .eq('user_id', userId)
+          .eq('id', tx.id)
+          .then(() => {});
+      }
+    },
+    [transactions, cacheTx, userId]
+  );
+
   // Recalibrate a tracked habit's target: updates the recurring transaction that
   // represents it in place, so future month-pace / interest-saved math uses the
   // new number instead of insert-a-new-row-every-time.
@@ -481,6 +510,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready,
       transactions,
       addTransaction,
+      updateTransaction,
       deleteTransaction,
       adjustHabitTarget,
       customHabits,
@@ -506,6 +536,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready,
       transactions,
       addTransaction,
+      updateTransaction,
       deleteTransaction,
       adjustHabitTarget,
       customHabits,

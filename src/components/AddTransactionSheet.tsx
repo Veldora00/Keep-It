@@ -5,15 +5,34 @@ import { colors, fonts, radii } from '../theme/theme';
 import { Field, SelectField, CheckRow } from './fields';
 import { PrimaryButton, TypeToggle } from './ui';
 import { useStore } from '../lib/store';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Frequency, TxType } from '../lib/types';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Frequency, Transaction, TxType } from '../lib/types';
 
 const FREQ_OPTIONS_EXPENSE = ['Weekly', 'Fortnightly', 'Monthly', 'Annually'];
 const FREQ_VALUES_EXPENSE: Frequency[] = ['weekly', 'fortnightly', 'monthly', 'annually'];
 const FREQ_OPTIONS_INCOME = ['One-off', 'Weekly', 'Fortnightly', 'Monthly', 'Annually'];
 const FREQ_VALUES_INCOME: (Frequency | null)[] = [null, 'weekly', 'fortnightly', 'monthly', 'annually'];
 
-export default function AddTransactionSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { addTransaction } = useStore();
+function freqToLabel(freq: Frequency | null, isIncome: boolean): string {
+  const options = isIncome ? FREQ_OPTIONS_INCOME : FREQ_OPTIONS_EXPENSE;
+  const values = isIncome ? FREQ_VALUES_INCOME : FREQ_VALUES_EXPENSE;
+  const idx = values.indexOf(freq);
+  return idx >= 0 ? options[idx] : 'Monthly';
+}
+
+// Pass `editingTx` to reuse this same sheet for editing an existing
+// transaction in place (same id) instead of always creating a new one —
+// e.g. a salary that changed, without having to delete and redo the whole
+// entry just to fix one number.
+export default function AddTransactionSheet({
+  visible,
+  onClose,
+  editingTx,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  editingTx?: Transaction | null;
+}) {
+  const { addTransaction, updateTransaction } = useStore();
   const [type, setType] = useState<TxType>('expense');
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -22,7 +41,15 @@ export default function AddTransactionSheet({ visible, onClose }: { visible: boo
   const [freqLabel, setFreqLabel] = useState('Monthly');
 
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+    if (editingTx) {
+      setType(editingTx.type);
+      setName(editingTx.type === 'expense' ? editingTx.name : '');
+      setAmount(String(editingTx.amount));
+      setCategory(editingTx.category);
+      setRecurring(editingTx.recurring);
+      setFreqLabel(freqToLabel(editingTx.frequency, editingTx.type === 'income'));
+    } else {
       setType('expense');
       setCategory(EXPENSE_CATEGORIES[0]);
       setRecurring(false);
@@ -30,7 +57,7 @@ export default function AddTransactionSheet({ visible, onClose }: { visible: boo
       setName('');
       setAmount('');
     }
-  }, [visible]);
+  }, [visible, editingTx]);
 
   function onTypeChange(v: 'left' | 'right') {
     const t: TxType = v === 'left' ? 'expense' : 'income';
@@ -60,16 +87,28 @@ export default function AddTransactionSheet({ visible, onClose }: { visible: boo
         freq = FREQ_VALUES_EXPENSE[idx] ?? 'monthly';
       }
     }
-    addTransaction({
-      id: Date.now(),
-      name: nm,
-      amount: amt,
-      category,
-      recurring: isRecurring,
-      frequency: freq,
-      type,
-      date: new Date().toISOString(),
-    });
+    if (editingTx) {
+      updateTransaction({
+        ...editingTx,
+        name: nm,
+        amount: amt,
+        category,
+        recurring: isRecurring,
+        frequency: freq,
+        type,
+      });
+    } else {
+      addTransaction({
+        id: Date.now(),
+        name: nm,
+        amount: amt,
+        category,
+        recurring: isRecurring,
+        frequency: freq,
+        type,
+        date: new Date().toISOString(),
+      });
+    }
     onClose();
   }
 
@@ -82,7 +121,7 @@ export default function AddTransactionSheet({ visible, onClose }: { visible: boo
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Add transaction</Text>
+            <Text style={styles.title}>{editingTx ? 'Edit transaction' : 'Add transaction'}</Text>
             <Pressable onPress={onClose} hitSlop={10}>
               <Text style={styles.close}>✕</Text>
             </Pressable>
@@ -103,7 +142,7 @@ export default function AddTransactionSheet({ visible, onClose }: { visible: boo
             <SelectField label="How often" value={freqLabel} options={freqOptions} onChange={setFreqLabel} />
           ) : null}
 
-          <PrimaryButton title="Add transaction" onPress={submit} />
+          <PrimaryButton title={editingTx ? 'Save changes' : 'Add transaction'} onPress={submit} />
         </Pressable>
       </Pressable>
     </Modal>
