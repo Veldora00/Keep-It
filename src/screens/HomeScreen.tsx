@@ -287,9 +287,19 @@ export default function HomeScreen() {
   const trackBtnDisabled = habitNone;
 
   // ---------- Balance / recent / categories ----------
+  // "Current balance" is the all-time running total, but the two stat cards
+  // are explicitly labelled "this month" — they need to filter to the
+  // current calendar month, not sum every transaction ever logged (this was
+  // invisible with a handful of manually-entered rows, but a multi-year CSV
+  // import exposed it immediately: $161k "this month" from 600 historical
+  // transactions).
   const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const balance = income - expense;
+  const currentMonthKey = appNow().toISOString().slice(0, 7); // "YYYY-MM"
+  const isThisMonth = (t: Transaction) => (t.date || '').slice(0, 7) === currentMonthKey;
+  const incomeThisMonth = transactions.filter((t) => t.type === 'income' && isThisMonth(t)).reduce((s, t) => s + t.amount, 0);
+  const expenseThisMonth = transactions.filter((t) => t.type === 'expense' && isThisMonth(t)).reduce((s, t) => s + t.amount, 0);
   const recentList = showAllRecent ? transactions : transactions.slice(0, 5);
 
   const byCategory: Record<string, number> = {};
@@ -475,11 +485,11 @@ export default function HomeScreen() {
         <View style={styles.statRow}>
           <View style={styles.statCard}>
             <Text style={styles.statLbl}>Income this month</Text>
-            <Text style={[styles.statAmt, { color: colors.accentDeep }]}>{money(income)}</Text>
+            <Text style={[styles.statAmt, { color: colors.accentDeep }]}>{money(incomeThisMonth)}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLbl}>Spent this month</Text>
-            <Text style={[styles.statAmt, { color: colors.red }]}>{money(expense)}</Text>
+            <Text style={[styles.statAmt, { color: colors.red }]}>{money(expenseThisMonth)}</Text>
           </View>
         </View>
 
