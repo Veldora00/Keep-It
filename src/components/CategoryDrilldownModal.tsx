@@ -10,7 +10,7 @@ import { colors, fonts, radii } from '../theme/theme';
 import { PrimaryButton } from './ui';
 import { SelectField } from './fields';
 import { money } from '../lib/calculations';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Transaction } from '../lib/types';
+import { computeRefundedExpenseIds, EXPENSE_CATEGORIES, INCOME_CATEGORIES, Transaction } from '../lib/types';
 
 const ALL_CATEGORIES = Array.from(new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]));
 
@@ -33,8 +33,13 @@ export default function CategoryDrilldownModal({
 
   if (!category) return null;
 
+  // A refunded purchase (a bid deposit that got paid back, a return, etc)
+  // isn't real spending in this category — the money came straight back —
+  // so it's left out of both the list and the total, the same way it's
+  // excluded from the Home screen's spending totals and habit detection.
+  const refundedIds = computeRefundedExpenseIds(transactions);
   const rows = transactions
-    .filter((t) => t.category === category)
+    .filter((t) => t.category === category && !(t.type === 'expense' && refundedIds.has(t.id)))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const total = rows.reduce((s, t) => s + t.amount, 0);
   const categoryOptions = ALL_CATEGORIES.filter((c) => c !== category);

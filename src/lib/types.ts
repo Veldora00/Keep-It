@@ -63,6 +63,37 @@ export function goalSummary(goal: Goal): string {
 
 export type DailyLogs = Record<string, Record<string, boolean>>;
 
+// A CSV import (especially a credit-card export) records a purchase and its
+// later refund/return as two separate transactions — same merchant name,
+// same amount, opposite direction (an expense charge and an income credit).
+// That's a correct ledger entry, but it isn't real spending: the money came
+// straight back. Left alone, this double-counts in spending totals and the
+// category breakdown, AND makes a one-off purchase-then-refund look like a
+// "recurring habit" just because the same merchant name appears twice.
+// This matches purchases to refunds by exact name+amount (so it never nets
+// out two genuinely separate purchases that merely cost the same), pairing
+// off duplicates one-to-one rather than letting one refund cancel every
+// expense with that name.
+export function computeRefundedExpenseIds(transactions: Transaction[]): Set<number> {
+  const incomeRemaining = new Map<string, number>();
+  for (const t of transactions) {
+    if (t.type !== 'income') continue;
+    const key = `${t.name.trim().toLowerCase()}|${t.amount.toFixed(2)}`;
+    incomeRemaining.set(key, (incomeRemaining.get(key) || 0) + 1);
+  }
+  const refundedIds = new Set<number>();
+  for (const t of transactions) {
+    if (t.type !== 'expense') continue;
+    const key = `${t.name.trim().toLowerCase()}|${t.amount.toFixed(2)}`;
+    const remaining = incomeRemaining.get(key) || 0;
+    if (remaining > 0) {
+      refundedIds.add(t.id);
+      incomeRemaining.set(key, remaining - 1);
+    }
+  }
+  return refundedIds;
+}
+
 export const EXPENSE_CATEGORIES = [
   'Housing',
   'Groceries',

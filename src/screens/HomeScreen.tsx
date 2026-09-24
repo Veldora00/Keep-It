@@ -9,7 +9,17 @@ import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactMo
 import CategoryDrilldownModal from '../components/CategoryDrilldownModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
 import { appNow, computeExtraImpact, formatTerm, money, monthlyEquivalent, round2, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
-import { Goal, HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, MyLoan, SUBSCRIPTIONS, Transaction } from '../lib/types';
+import {
+  computeRefundedExpenseIds,
+  Goal,
+  HABIT_LABELS,
+  HABIT_PRESET_KEYS,
+  HABITS,
+  HabitMode,
+  MyLoan,
+  SUBSCRIPTIONS,
+  Transaction,
+} from '../lib/types';
 
 type HabitFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly';
 const FREQUENCY_OPTIONS: HabitFrequency[] = ['daily', 'weekly', 'fortnightly', 'monthly'];
@@ -206,8 +216,12 @@ export default function HomeScreen() {
     const customLabels = new Set(customList.map((c) => c.label.trim().toLowerCase()));
     const wantCancelOnly = habitMode === 'subscription';
     const groups = new Map<string, { latest: Transaction; count: number }>();
+    // A purchase that was refunded (a bid deposit paid back, a return, etc)
+    // isn't a habit just because the same merchant name shows up twice —
+    // it's one purchase that got undone, not repeated spending.
+    const refundedIds = computeRefundedExpenseIds(transactions);
     transactions
-      .filter((t) => t.type === 'expense' && !t.habitTrackKey)
+      .filter((t) => t.type === 'expense' && !t.habitTrackKey && !refundedIds.has(t.id))
       .filter((t) => (wantCancelOnly ? isCancelOnlyCategory(t.category) : t.category !== 'Transfers' && !isCancelOnlyCategory(t.category)))
       .filter((t) => new Date(t.date).getTime() >= cutoff)
       .forEach((t) => {
@@ -372,7 +386,12 @@ export default function HomeScreen() {
   // near-equal income/spending for the month: every transfer ever imported
   // (which can be a very large all-time total) was being subtracted as if
   // it were real spending.
-  const isRealMoney = (t: Transaction) => t.category !== 'Transfers';
+  // A refunded purchase (bid deposit paid back, a return, etc) isn't real
+  // spending — the money came straight back — so it's excluded here the same
+  // way an internal Transfer already was, instead of double-counting both
+  // the charge and its refund as if they were two unrelated events.
+  const refundedExpenseIds = computeRefundedExpenseIds(transactions);
+  const isRealMoney = (t: Transaction) => t.category !== 'Transfers' && !(t.type === 'expense' && refundedExpenseIds.has(t.id));
   const income = transactions.filter((t) => t.type === 'income' && isRealMoney(t)).reduce((s, t) => s + t.amount, 0);
   const expense = transactions.filter((t) => t.type === 'expense' && isRealMoney(t)).reduce((s, t) => s + t.amount, 0);
   const balance = income - expense;
@@ -384,7 +403,7 @@ export default function HomeScreen() {
 
   const byCategory: Record<string, number> = {};
   transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => t.type === 'expense' && !refundedExpenseIds.has(t.id))
     .forEach((t) => (byCategory[t.category] = (byCategory[t.category] || 0) + t.amount));
   const catTotal = Object.values(byCategory).reduce((a, b) => a + b, 0);
   const sortedCats = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);

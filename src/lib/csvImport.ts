@@ -240,8 +240,17 @@ const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
   { category: 'Transport', pattern: /uber|\bdidi\b|opal|myki|fuel|\bbp\b|caltex|shell|ampol|7-?eleven|linkt|toll/i },
   {
     category: 'Subscriptions',
+    // "telegram premium"/"discord nitro" only matched the FULL product name
+    // — a real statement line like "Google Telegram Barangaroo AU AUS Card
+    // xx1349" (Telegram billed through Google Play, with Google's own
+    // billing address appended and no "Premium"/"Nitro" in sight) matched
+    // neither the app name alone nor "google\s*\*"/"google play" (no
+    // literal asterisk or "play" here), so it fell through to Other. Match
+    // the app name alone, and treat any "google" billing line as a
+    // Subscriptions signal — on a personal statement a Google charge is
+    // almost always Play Store/One/Workspace, not a business expense.
     pattern:
-      /netflix|spotify|disney|stan\b|amazon prime|youtube premium|apple\.com\/bill|kayo|telegram premium|google\s*\*|google play|discord nitro|icloud|chatgpt|openai/i,
+      /netflix|spotify|disney|stan\b|amazon prime|youtube premium|apple\.com\/bill|kayo|\btelegram\b|\bgoogle\b|discord|icloud|chatgpt|openai/i,
   },
   { category: 'Utilities', pattern: /energy|electricity|agl|origin|telstra|optus|vodafone|water corp|gas\b/i },
   { category: 'Housing', pattern: /rent|mortgage|strata|real estate/i },
