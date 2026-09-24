@@ -133,17 +133,24 @@ Deno.serve(async (req: Request) => {
           {
             role: "system",
             content:
-              "You categorize Australian bank transaction descriptions for a personal budgeting app. For each line, pick exactly ONE category from that line's own 'allowed' list — never a category outside it, never a new one.\n" +
+              // Deliberately short and principle-based rather than a giant
+              // list of exact merchant names to match — a long list of
+              // examples just teaches this model to pattern-match specific
+              // strings instead of actually reasoning about the merchant,
+              // which is exactly how "Google Telegram Barangaroo AU" (no
+              // literal "Premium"/"*" in sight) fell through every keyword.
+              // This trusts the model's own knowledge of real businesses
+              // instead, and only spells out the handful of things that
+              // genuinely aren't inferable from the merchant name alone
+              // (an internal transfer, a broker payment, a bank fee).
+              "You are a bank transaction categoriser for a personal budgeting app. Strip away metadata — locations, dates, card numbers, reference codes, 'Value Date:' stamps — and focus on the real merchant or purpose of the payment. Use your own knowledge of real businesses and brands to reason out what it actually is, rather than expecting an exact keyword match; a payment routed through an app store (Google, Apple) that names a known app or service anywhere in the text is that app's category, most often Subscriptions, even without the word 'Premium'/'Nitro' attached and even with extra address/card text tacked on.\n" +
               "\n" +
-              "Rules of thumb, in priority order:\n" +
-              "1. A line saying 'Transfer to'/'Transfer from' another account, naming PayID, or a credit-union/bank 'Member Net transfer' between the person's own accounts, is money moving between accounts they own, not real spending or income — that's Transfers, even if you don't recognise the account name.\n" +
-              "2. A payment going to a stockbroker or trading/investment platform (Interactive Brokers, Webull, CommSec, Superhero, Selfwealth, a superannuation fund like AMP/AustralianSuper, etc) is Savings — it's money being put toward investing, not spending or an internal cash transfer.\n" +
-              "3. A bank/card/account fee (the word 'fee', a dishonour or overdrawn line) is Fees & Charges, not Subscriptions — a fee isn't a service someone chose to sign up for.\n" +
-              "4. A billing line routed through an app store, OR any line where the word 'Google' appears at all (e.g. 'GOOGLE *', 'GOOGLE PLAY', or just 'Google Telegram Barangaroo AU' with Google's own office address tacked on — a personal Google charge is essentially always Play Store/One/Workspace billing, never treat it as a business expense), OR naming a known app/streaming/software service ANYWHERE in the text even without the word 'Premium'/'Nitro' attached (Netflix, Spotify, Disney+, Telegram, Discord, ChatGPT/OpenAI, iCloud, a gym or phone plan, etc) — is Subscriptions, even if the merchant text is garbled or has extra location/card-number text appended. A small amount that repeats monthly is a strong Subscriptions signal too.\n" +
-              "5. A restaurant, takeaway, fast-food chain, cafe, or food-delivery service (KFC, McDonald's, Uber Eats, Menulog, DoorDash, a named cafe/bakery/pizza/sushi/BBQ place, etc) is Eat out — this is different from Groceries (a supermarket) and from Entertainment.\n" +
-              "6. Otherwise match by what the merchant actually sells: a supermarket chain is Groceries, a general retailer (Amazon, eBay, a clothing/shoe/electronics brand, department/hardware store) is Shopping, a cinema/ticketing site is Entertainment, an energy/telco provider is Utilities, rent/mortgage/strata is Housing, fuel/rideshare/tolls/public transport is Transport.\n" +
-              "7. Use Other only when the description genuinely gives no signal at all (e.g. a cryptic reference number with no merchant name) — it should be your last resort, not a default.\n" +
-              "An 'amount' may be given for extra context (e.g. a small recurring-looking amount supports Subscriptions), but the description is the primary signal.",
+              "For each line, pick exactly ONE category from that line's own 'allowed' list — never a category outside it, never a new one. A few things worth knowing that aren't obvious from the merchant name alone:\n" +
+              "- Money moving to/from the person's own other accounts (transfer to/from, PayID, a bank 'Member Net transfer') is Transfers, not real spending or income.\n" +
+              "- A payment to a stockbroker, trading platform, or superannuation fund is Savings — money going toward investing, not spending.\n" +
+              "- A bank/card/account fee is Fees & Charges, not Subscriptions — a fee isn't a service someone chose to sign up for.\n" +
+              "- Use Other only when the description truly gives no signal at all — it's a last resort, never a default.\n" +
+              "An 'amount' may be given for extra context (a small recurring-looking amount supports Subscriptions), but the description is the primary signal.",
           },
           { role: "user", content: prompt },
         ],
