@@ -12,6 +12,10 @@ export interface Transaction {
   date: string;
   habitTrackKey?: string;
   habitSaving?: number;
+  // Set only when an already-logged expense (e.g. a "Groceries" transaction)
+  // gets turned into a tracked habit — the amount it had before, so
+  // untracking can restore it instead of deleting the real expense record.
+  preTrackAmount?: number;
 }
 
 export interface CustomHabit {

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { Alert } from '../lib/alert';
 import { colors, fonts, radii } from '../theme/theme';
 import { Field, SelectField, CheckRow } from './fields';
-import { PrimaryButton, TypeToggle } from './ui';
+import { PrimaryButton } from './ui';
 import { useStore } from '../lib/store';
+import { money } from '../lib/calculations';
+import { parseBankCsv, ParsedRow } from '../lib/csvImport';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Frequency, Transaction, TxType } from '../lib/types';
 
 const FREQ_OPTIONS_EXPENSE = ['Weekly', 'Fortnightly', 'Monthly', 'Annually'];
@@ -19,10 +22,13 @@ function freqToLabel(freq: Frequency | null, isIncome: boolean): string {
   return idx >= 0 ? options[idx] : 'Monthly';
 }
 
+type SheetTab = 'expense' | 'income' | 'import';
+
 // Pass `editingTx` to reuse this same sheet for editing an existing
 // transaction in place (same id) instead of always creating a new one —
 // e.g. a salary that changed, without having to delete and redo the whole
-// entry just to fix one number.
+// entry just to fix one number. Editing never shows the "Import" tab —
+// that only makes sense from a blank "+".
 export default function AddTransactionSheet({
   visible,
   onClose,
@@ -33,6 +39,7 @@ export default function AddTransactionSheet({
   editingTx?: Transaction | null;
 }) {
   const { addTransaction, updateTransaction } = useStore();
+  const [tab, setTab] = useState<SheetTab>('expense');
   const [type, setType] = useState<TxType>('expense');
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -43,6 +50,7 @@ export default function AddTransactionSheet({
   useEffect(() => {
     if (!visible) return;
     if (editingTx) {
+      setTab(editingTx.type);
       setType(editingTx.type);
       setName(editingTx.type === 'expense' ? editingTx.name : '');
       setAmount(String(editingTx.amount));
@@ -50,6 +58,7 @@ export default function AddTransactionSheet({
       setRecurring(editingTx.recurring);
       setFreqLabel(freqToLabel(editingTx.frequency, editingTx.type === 'income'));
     } else {
+      setTab('expense');
       setType('expense');
       setCategory(EXPENSE_CATEGORIES[0]);
       setRecurring(false);
@@ -59,12 +68,13 @@ export default function AddTransactionSheet({
     }
   }, [visible, editingTx]);
 
-  function onTypeChange(v: 'left' | 'right') {
-    const t: TxType = v === 'left' ? 'expense' : 'income';
-    setType(t);
-    setCategory(t === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
+  function changeTab(next: SheetTab) {
+    setTab(next);
+    if (next === 'import') return;
+    setType(next);
+    setCategory(next === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
     setRecurring(false);
-    setFreqLabel(t === 'income' ? 'Monthly' : 'Monthly');
+    setFreqLabel('Monthly');
   }
 
   function submit() {
@@ -121,31 +131,184 @@ export default function AddTransactionSheet({
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{editingTx ? 'Edit transaction' : 'Add transaction'}</Text>
+            <Text style={styles.title}>{editingTx ? 'Edit transaction' : tab === 'import' ? 'Add your statement' : 'Add transaction'}</Text>
             <Pressable onPress={onClose} hitSlop={10}>
               <Text style={styles.close}>✕</Text>
             </Pressable>
           </View>
 
-          <TypeToggle leftLabel="Expense" rightLabel="Income" active={type === 'expense' ? 'left' : 'right'} onChange={onTypeChange} />
-
-          {type === 'expense' ? (
-            <Field label="What's it for" value={name} onChangeText={setName} placeholder="e.g. Groceries, Rent" keyboardType="default" />
+          {!editingTx ? (
+            <View style={styles.tabRow}>
+              <Pressable style={[styles.tabBtn, tab === 'expense' && styles.tabBtnExpenseActive]} onPress={() => changeTab('expense')}>
+                <Text style={[styles.tabBtnText, tab === 'expense' && styles.tabBtnExpenseActiveText]}>Expense</Text>
+              </Pressable>
+              <Pressable style={[styles.tabBtn, tab === 'income' && styles.tabBtnIncomeActive]} onPress={() => changeTab('income')}>
+                <Text style={[styles.tabBtnText, tab === 'income' && styles.tabBtnIncomeActiveText]}>Income</Text>
+              </Pressable>
+              <Pressable style={[styles.tabBtn, tab === 'import' && styles.tabBtnImportActive]} onPress={() => changeTab('import')}>
+                <Text style={[styles.tabBtnText, tab === 'import' && styles.tabBtnImportActiveText]}>Add statement</Text>
+              </Pressable>
+            </View>
           ) : null}
-          <Field label="Amount" value={amount} onChangeText={setAmount} placeholder="0.00" />
-          <SelectField label="Category" value={category} options={categories} onChange={setCategory} />
 
-          {type === 'expense' ? (
-            <CheckRow label="Repeats" checked={recurring} onToggle={() => setRecurring(!recurring)} />
-          ) : null}
-          {(type === 'expense' && recurring) || type === 'income' ? (
-            <SelectField label="How often" value={freqLabel} options={freqOptions} onChange={setFreqLabel} />
-          ) : null}
+          {tab === 'import' ? (
+            <CsvImportBody onDone={onClose} />
+          ) : (
+            <>
+              {type === 'expense' ? (
+                <Field label="What's it for" value={name} onChangeText={setName} placeholder="e.g. Groceries, Rent" keyboardType="default" />
+              ) : null}
+              <Field label="Amount" value={amount} onChangeText={setAmount} placeholder="0.00" />
+              <SelectField label="Category" value={category} options={categories} onChange={setCategory} />
 
-          <PrimaryButton title={editingTx ? 'Save changes' : 'Add transaction'} onPress={submit} />
+              {type === 'expense' ? (
+                <CheckRow label="Repeats" checked={recurring} onToggle={() => setRecurring(!recurring)} />
+              ) : null}
+              {(type === 'expense' && recurring) || type === 'income' ? (
+                <SelectField label="How often" value={freqLabel} options={freqOptions} onChange={setFreqLabel} />
+              ) : null}
+
+              <PrimaryButton title={editingTx ? 'Save changes' : 'Add transaction'} onPress={submit} />
+            </>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+// The CSV-import half of the "+" sheet — picking a file, reviewing/fixing
+// the parsed rows, and bulk-adding them. See csvImport.ts for how it copes
+// with different bank layouts (CommBank's headerless export vs a bank that
+// ships a header row vs one that splits Debit/Credit into two columns).
+function CsvImportBody({ onDone }: { onDone: () => void }) {
+  const { addTransactions } = useStore();
+  const [rows, setRows] = useState<ParsedRow[] | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  function reset() {
+    setRows(null);
+    setFileName('');
+    setError('');
+    setBusy(false);
+  }
+
+  async function pickFile() {
+    setError('');
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', '*/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      setBusy(true);
+      const text = await fetch(asset.uri).then((r) => r.text());
+      const parsed = parseBankCsv(text);
+      if (parsed.rows.length === 0) {
+        setError("Couldn't find any transactions in that file — is it a bank transaction export?");
+        setBusy(false);
+        return;
+      }
+      setFileName(asset.name || 'statement.csv');
+      setRows(parsed.rows);
+      setBusy(false);
+    } catch (e) {
+      setError('Could not read that file. Try exporting a fresh CSV from your bank and pick it again.');
+      setBusy(false);
+    }
+  }
+
+  function toggleRow(i: number) {
+    setRows((prev) => (prev ? prev.map((r, idx) => (idx === i ? { ...r, include: !r.include } : r)) : prev));
+  }
+
+  function setCategory(i: number, category: string) {
+    setRows((prev) => (prev ? prev.map((r, idx) => (idx === i ? { ...r, category } : r)) : prev));
+  }
+
+  function doImport() {
+    if (!rows) return;
+    const included = rows.filter((r) => r.include);
+    if (included.length === 0) return;
+    const now = Date.now();
+    const txs: Transaction[] = included.map((r, i) => ({
+      id: now + i,
+      name: r.description,
+      amount: Math.abs(r.amount),
+      category: r.category,
+      recurring: false,
+      frequency: null,
+      type: r.type,
+      date: new Date(r.date).toISOString(),
+    }));
+    addTransactions(txs);
+    reset();
+    onDone();
+  }
+
+  const includedCount = rows ? rows.filter((r) => r.include).length : 0;
+
+  if (!rows) {
+    return (
+      <>
+        <Text style={styles.helpText}>
+          Export your transaction history as a CSV from your bank's website (most have an "Export" button above the
+          transaction list — CommBank's is under NetBank on desktop, not the app) and pick the file below. Nothing gets
+          added until you review it on the next screen.
+        </Text>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <PrimaryButton title={busy ? 'Reading file…' : 'Choose CSV file'} onPress={pickFile} disabled={busy} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Text style={styles.helpText}>
+        {fileName} — found {rows.length} transaction{rows.length === 1 ? '' : 's'}. Untick anything that shouldn't be
+        imported, and fix a category if the guess is wrong.
+      </Text>
+      <ScrollView style={styles.rowScroll}>
+        {rows.map((r, i) => (
+          <View key={i} style={[styles.row, !r.include && styles.rowExcluded]}>
+            <Pressable style={[styles.checkbox, r.include && styles.checkboxChecked]} onPress={() => toggleRow(i)} hitSlop={8}>
+              {r.include ? <Text style={styles.checkmark}>✓</Text> : null}
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowDesc} numberOfLines={1}>
+                {r.description}
+              </Text>
+              <Text style={styles.rowMeta}>{r.date}</Text>
+              {r.include ? (
+                <View style={styles.catPicker}>
+                  <SelectField
+                    label=""
+                    value={r.category}
+                    options={r.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES}
+                    onChange={(v) => setCategory(i, v)}
+                  />
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.rowAmt, { color: r.type === 'income' ? colors.accentDeep : colors.red }]}>
+              {r.type === 'income' ? '+' : '-'}
+              {money(Math.abs(r.amount))}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+      <PrimaryButton
+        title={includedCount > 0 ? `Import ${includedCount} transaction${includedCount === 1 ? '' : 's'}` : 'Nothing selected'}
+        onPress={doImport}
+        disabled={includedCount === 0}
+      />
+      <Pressable onPress={reset} hitSlop={8}>
+        <Text style={styles.pickAnother}>Pick a different file</Text>
+      </Pressable>
+    </>
   );
 }
 
@@ -156,4 +319,26 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   title: { fontFamily: fonts.serif, fontSize: 20, color: colors.ink },
   close: { fontSize: 18, color: colors.ink, width: 40, height: 40, textAlign: 'center', textAlignVertical: 'center', borderRadius: radii.pill, borderWidth: 1, borderColor: colors.lineStrong, overflow: 'hidden', lineHeight: 40 },
+  tabRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  tabBtn: { flex: 1, paddingVertical: 11, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.paperWarm, alignItems: 'center' },
+  tabBtnText: { fontSize: 13, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
+  tabBtnExpenseActive: { backgroundColor: colors.redSoft, borderColor: colors.red },
+  tabBtnExpenseActiveText: { color: colors.red },
+  tabBtnIncomeActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  tabBtnIncomeActiveText: { color: colors.accentDeep },
+  tabBtnImportActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  tabBtnImportActiveText: { color: '#fff' },
+  helpText: { fontSize: 13, color: colors.inkDim, lineHeight: 19, marginBottom: 16 },
+  errorText: { fontSize: 13, color: colors.red, marginBottom: 12 },
+  rowScroll: { maxHeight: 340, marginBottom: 14 },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line },
+  rowExcluded: { opacity: 0.4 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkmark: { color: '#fff', fontSize: 13, fontFamily: fonts.sansBold, fontWeight: '700' },
+  rowDesc: { fontSize: 14, fontFamily: fonts.sansMedium, fontWeight: '500', color: colors.ink },
+  rowMeta: { fontSize: 11.5, color: colors.inkFaint, marginTop: 1, marginBottom: 4 },
+  rowAmt: { fontSize: 14, fontFamily: fonts.sansSemiBold, fontWeight: '600', marginTop: 2 },
+  catPicker: { maxWidth: 220 },
+  pickAnother: { fontSize: 12.5, color: colors.inkFaint, textAlign: 'center', marginTop: 10 },
 });

@@ -25,6 +25,9 @@ interface Store {
   ready: boolean;
   transactions: Transaction[];
   addTransaction: (tx: Transaction) => void;
+  // Bulk version for CSV import — see its definition for why the loop-based
+  // addTransaction can't be reused for this.
+  addTransactions: (txs: Transaction[]) => void;
   // Edits a transaction in place (same id) — e.g. your salary changed, or
   // you mistyped an amount. Previously the only option was delete-and-re-add,
   // which for a recurring item like a salary meant redoing name/category/
@@ -46,6 +49,15 @@ interface Store {
   habitTrackKey: (key: string, mode: HabitMode, label: string) => string;
   isHabitTracked: (key: string, mode: HabitMode, label: string) => boolean;
   trackHabit: (opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => void;
+  // Same as trackHabit, but updates an already-logged expense transaction in
+  // place instead of adding a new one alongside it — see its definition.
+  trackExistingTransaction: (
+    txId: number,
+    opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }
+  ) => void;
+  // Counterpart to trackExistingTransaction: restores the pre-track amount
+  // when there is one, deletes the row when there isn't (the old behaviour).
+  untrackHabitTx: (trackKey: string) => void;
   // Test-only: lets the one designated test account fast-forward what the
   // app considers "today" — everyone else gets canFastForward: false and
   // setDayOffset is a no-op for them.
@@ -88,6 +100,7 @@ function txFromRow(row: any): Transaction {
     date: row.date,
     habitTrackKey: row.habit_track_key ?? undefined,
     habitSaving: row.habit_saving != null ? Number(row.habit_saving) : undefined,
+    preTrackAmount: row.pre_track_amount != null ? Number(row.pre_track_amount) : undefined,
   };
 }
 
@@ -259,6 +272,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             habit_track_key: tx.habitTrackKey ?? null,
             habit_saving: tx.habitSaving ?? null,
           })
+          .then(() => {});
+      }
+    },
+    [transactions, cacheTx, userId]
+  );
+
+  // Bulk insert for CSV import — looping addTransaction would have every
+  // call close over the same stale `transactions` array and clobber all but
+  // the last row, so this does one state update and one batched insert.
+  const addTransactions = useCallback(
+    (txs: Transaction[]) => {
+      if (txs.length === 0) return;
+      const next = [...txs, ...transactions];
+      setTransactions(next);
+      cacheTx(next);
+      if (userId) {
+        supabase
+          .from('keepit_transactions')
+          .insert(
+            txs.map((tx) => ({
+              id: tx.id,
+              user_id: userId,
+              name: tx.name,
+              amount: tx.amount,
+              category: tx.category,
+              recurring: tx.recurring,
+              frequency: tx.frequency,
+              type: tx.type,
+              date: tx.date,
+              habit_track_key: tx.habitTrackKey ?? null,
+              habit_saving: tx.habitSaving ?? null,
+            }))
+          )
           .then(() => {});
       }
     },
@@ -466,6 +512,96 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [transactions]
   );
 
+  // Turns an already-logged expense (e.g. a "Groceries" transaction added via
+  // "+ Add transaction" or CSV import) into a tracked habit by updating that
+  // same row in place — not by adding a second, duplicate cost alongside it.
+  // Records the pre-track amount so untrackHabitTx can restore it later.
+  const trackExistingTransaction = useCallback(
+    (txId: number, opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => {
+      const { key, mode, label, monthlySpend, monthlySaving } = opts;
+      if (isHabitTracked(key, mode, label)) return;
+      const original = transactions.find((t) => t.id === txId);
+      if (!original) return;
+      const trackKey = habitTrackKeyFn(key, mode, label);
+      const next = transactions.map((t) =>
+        t.id === txId
+          ? {
+              ...t,
+              name: label,
+              amount: monthlySpend,
+              habitTrackKey: trackKey,
+              habitSaving: monthlySaving,
+              preTrackAmount: t.preTrackAmount ?? t.amount,
+            }
+          : t
+      );
+      setTransactions(next);
+      cacheTx(next);
+      const row = next.find((t) => t.id === txId);
+      if (userId && row) {
+        supabase
+          .from('keepit_transactions')
+          .update({
+            name: row.name,
+            amount: row.amount,
+            habit_track_key: row.habitTrackKey ?? null,
+            habit_saving: row.habitSaving ?? null,
+            pre_track_amount: row.preTrackAmount ?? null,
+          })
+          .eq('user_id', userId)
+          .eq('id', txId)
+          .then(() => {});
+      }
+      if (mode === 'daily') {
+        const today = todayKey();
+        const day = { ...(dailyLogs[today] || {}), [trackKey]: true };
+        const nextDl = { ...dailyLogs, [today]: day };
+        setDailyLogs(nextDl);
+        if (userId) {
+          AsyncStorage.setItem(scopedKey(LEGACY_DL_KEY, userId), JSON.stringify(nextDl)).catch(() => {});
+          supabase
+            .from('keepit_daily_logs')
+            .upsert({ user_id: userId, date_key: today, track_key: trackKey, tracked: true, updated_at: new Date().toISOString() })
+            .then(() => {});
+        }
+      }
+    },
+    [transactions, cacheTx, userId, isHabitTracked, dailyLogs]
+  );
+
+  // Stops tracking a habit. When it came from an already-logged expense
+  // (preTrackAmount is set), restore that original amount instead of
+  // deleting the row outright — untracking shouldn't erase a real expense.
+  // Only a purely synthetic tracking row (no preTrackAmount) gets deleted.
+  const untrackHabitTx = useCallback(
+    (trackKey: string) => {
+      const tx = transactions.find((t) => t.habitTrackKey === trackKey);
+      if (!tx) return;
+      if (tx.preTrackAmount != null) {
+        const restoredAmount = tx.preTrackAmount;
+        const next = transactions.map((t) =>
+          t.id === tx.id ? { ...t, amount: restoredAmount, habitTrackKey: undefined, habitSaving: undefined, preTrackAmount: undefined } : t
+        );
+        setTransactions(next);
+        cacheTx(next);
+        if (userId) {
+          supabase
+            .from('keepit_transactions')
+            .update({ amount: restoredAmount, habit_track_key: null, habit_saving: null, pre_track_amount: null })
+            .eq('user_id', userId)
+            .eq('id', tx.id)
+            .then(() => {});
+        }
+      } else {
+        const next = transactions.filter((t) => t.id !== tx.id);
+        setTransactions(next);
+        cacheTx(next);
+        if (userId) supabase.from('keepit_transactions').delete().eq('user_id', userId).eq('id', tx.id).then(() => {});
+      }
+    },
+    [transactions, cacheTx, userId]
+  );
+
   const trackHabit = useCallback(
     (opts: { key: string; mode: HabitMode; label: string; monthlySpend: number; monthlySaving: number }) => {
       const { key, mode, label, monthlySpend, monthlySaving } = opts;
@@ -510,6 +646,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready,
       transactions,
       addTransaction,
+      addTransactions,
       updateTransaction,
       deleteTransaction,
       adjustHabitTarget,
@@ -525,6 +662,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       habitTrackKey,
       isHabitTracked,
       trackHabit,
+      trackExistingTransaction,
+      untrackHabitTx,
       canFastForward,
       dayOffset,
       setDayOffset,
@@ -536,6 +675,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready,
       transactions,
       addTransaction,
+      addTransactions,
       updateTransaction,
       deleteTransaction,
       adjustHabitTarget,
@@ -551,6 +691,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       habitTrackKey,
       isHabitTracked,
       trackHabit,
+      trackExistingTransaction,
+      untrackHabitTx,
       canFastForward,
       dayOffset,
       setDayOffset,
@@ -590,6 +732,7 @@ async function migrateLegacyLocalData(userId: string) {
             date: t.date,
             habit_track_key: t.habitTrackKey ?? null,
             habit_saving: t.habitSaving ?? null,
+            pre_track_amount: t.preTrackAmount ?? null,
           }))
         );
       }

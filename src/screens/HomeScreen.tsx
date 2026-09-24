@@ -105,6 +105,10 @@ export default function HomeScreen() {
   const [frequency, setFrequency] = useState<HabitFrequency>('daily');
   const [cutChoice, setCutChoice] = useState<'20' | '40' | 'custom' | null>(null);
   const [cutCustomOpen, setCutCustomOpen] = useState(false);
+  // Set only when the habit being edited was picked from an already-logged
+  // expense (see selectExpenseHabit) — tracking then updates that same
+  // transaction instead of adding a second, duplicate cost alongside it.
+  const [sourceTxId, setSourceTxId] = useState<number | null>(null);
 
   function selectHabit(mode: HabitMode, key: string) {
     setHabitModeState(mode);
@@ -113,6 +117,7 @@ export default function HomeScreen() {
     setFrequency(mode === 'daily' ? 'daily' : 'monthly');
     setCutChoice(null);
     setCutCustomOpen(false);
+    setSourceTxId(null);
     const preset = trackedOverride(mode, key, transactions) || getPreset(mode, key, customHabits);
     setNowStr(String(preset.now));
     setThenStr(String(preset.then));
@@ -194,6 +199,7 @@ export default function HomeScreen() {
     setCutChoice(null);
     setCutCustomOpen(false);
     setCustomName(t.name);
+    setSourceTxId(t.id);
     const monthly = t.recurring ? monthlyEquivalent(t.amount, t.frequency) : t.amount;
     setNowStr(String(round2(monthly)));
     setThenStr(String(round2(monthly)));
@@ -254,7 +260,13 @@ export default function HomeScreen() {
     if (now - then <= 0) return;
     if (tracked) return;
     const monthlySpend = monthlyEquivalent(then, frequency);
-    store.trackHabit({ key: selectedHabitKey, mode: habitMode, label, monthlySpend, monthlySaving });
+    // Came from an already-logged expense (a chip from expenseHabitCandidates) —
+    // update that same transaction instead of adding a second, duplicate cost.
+    if (sourceTxId != null && transactions.some((t) => t.id === sourceTxId)) {
+      store.trackExistingTransaction(sourceTxId, { key: selectedHabitKey, mode: habitMode, label, monthlySpend, monthlySaving });
+    } else {
+      store.trackHabit({ key: selectedHabitKey, mode: habitMode, label, monthlySpend, monthlySaving });
+    }
     setTrackedImpact({
       label,
       monthlySaving,
@@ -264,8 +276,7 @@ export default function HomeScreen() {
 
   function untrackHabit() {
     const trackKey = habitTrackKeyFn(selectedHabitKey, habitMode, label);
-    const tx = transactions.find((t) => t.habitTrackKey === trackKey);
-    if (tx) deleteTransaction(tx.id);
+    store.untrackHabitTx(trackKey);
   }
 
   const trackBtnLabel = habitNone
