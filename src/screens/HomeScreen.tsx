@@ -6,6 +6,7 @@ import { CheckRow, Field } from '../components/fields';
 import AddTransactionSheet from '../components/AddTransactionSheet';
 import LoanSheet from '../components/LoanSheet';
 import TrackedImpactModal, { TrackedImpact } from '../components/TrackedImpactModal';
+import CategoryDrilldownModal from '../components/CategoryDrilldownModal';
 import { useStore, habitTrackKeyFn } from '../lib/store';
 import { appNow, computeExtraImpact, formatTerm, money, monthlyEquivalent, round2, FREQUENCY_LABELS, FREQUENCY_NOUN } from '../lib/calculations';
 import { Goal, HABIT_LABELS, HABIT_PRESET_KEYS, HABITS, HabitMode, MyLoan, SUBSCRIPTIONS, Transaction } from '../lib/types';
@@ -87,13 +88,14 @@ function trackedOverride(mode: HabitMode, key: string, transactions: Transaction
 
 export default function HomeScreen() {
   const store = useStore();
-  const { transactions, dailyLogs, myLoan, customHabits, deleteTransaction, goal } = store;
+  const { transactions, dailyLogs, myLoan, customHabits, deleteTransaction, updateTransaction, goal } = store;
 
   const [txSheetOpen, setTxSheetOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [loanSheetOpen, setLoanSheetOpen] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
   const [trackedImpact, setTrackedImpact] = useState<TrackedImpact | null>(null);
+  const [categoryDrilldown, setCategoryDrilldown] = useState<string | null>(null);
 
   const [habitMode, setHabitModeState] = useState<HabitMode>('daily');
   const [selectedHabitKey, setSelectedHabitKey] = useState('coffee');
@@ -178,21 +180,36 @@ export default function HomeScreen() {
   const pickerKeys = HABIT_PRESET_KEYS[habitMode];
   const customList = customHabits[habitMode] || [];
 
-  // Groceries, utilities, whatever else gets logged via "+ Add transaction"
-  // are habits too — surface them as extra picker chips (Everyday habit only,
-  // since that's what they mostly are) instead of leaving them only
-  // reachable through "+ Other" by retyping the name from scratch.
+  // A category that's really a fee or a fixed-price plan (Fees & Charges,
+  // Subscriptions) can't be "spent 20% less on" — it's cancel-or-keep, not a
+  // dial — so it belongs under the Subscriptions tab's cancel-only UI, never
+  // in the Everyday habit picker's percentage-cut UI.
+  function isCancelOnlyCategory(category: string): boolean {
+    return category === 'Subscriptions' || category === 'Fees & Charges';
+  }
+
+  // Groceries, cafes, whatever else gets logged via "+ Add transaction" are
+  // habits too — surface them as extra picker chips instead of leaving them
+  // only reachable through "+ Other" by retyping the name from scratch.
+  // Which real transactions qualify depends on which tab is open: Everyday
+  // habit wants genuine day-to-day spending (never a fee/subscription, never
+  // an internal transfer — there's nothing to "cut back on" with money
+  // you're just moving between your own accounts), while Subscriptions
+  // wants exactly the fee/subscription-style ones, so they land on the
+  // cancel-only UI instead of a nonsensical percentage-off button.
   const expenseHabitCandidates = useMemo(() => {
-    if (habitMode !== 'daily') return [];
+    // Only counts as a "habit" if it's actually recurred recently — a
+    // single one-off purchase from 8 months ago shouldn't outrank something
+    // genuinely repeating, so this only looks at the last ~3 months.
+    const cutoff = appNow().getTime() - 92 * 86400000;
     const presetLabels = new Set(pickerKeys.map((k) => (HABIT_LABELS[k] || '').trim().toLowerCase()));
     const customLabels = new Set(customList.map((c) => c.label.trim().toLowerCase()));
+    const wantCancelOnly = habitMode === 'subscription';
     const groups = new Map<string, { latest: Transaction; count: number }>();
     transactions
-      // A transfer to your own account (savings, investment, another bank)
-      // isn't a spending habit — it was showing up here as a "habit" chip
-      // purely because it's type 'expense', which was confusing since
-      // there's nothing to cut back on with money you're just moving.
-      .filter((t) => t.type === 'expense' && !t.habitTrackKey && t.category !== 'Transfers')
+      .filter((t) => t.type === 'expense' && !t.habitTrackKey)
+      .filter((t) => (wantCancelOnly ? isCancelOnlyCategory(t.category) : t.category !== 'Transfers' && !isCancelOnlyCategory(t.category)))
+      .filter((t) => new Date(t.date).getTime() >= cutoff)
       .forEach((t) => {
         const nameKey = t.name.trim().toLowerCase();
         if (!nameKey || presetLabels.has(nameKey) || customLabels.has(nameKey)) return;
@@ -209,14 +226,29 @@ export default function HomeScreen() {
     // habit; a one-off $400 purchase last week isn't, even though it'd win
     // a most-recent sort. This is plain counting, not an AI call: no reason
     // to spend a model on something a tally already gets right for free.
+    // Requiring at least 2 hits in the window is what "repeated" means —
+    // a single occurrence, however recent, isn't a habit yet.
     return Array.from(groups.values())
+      .filter((g) => g.count >= 2)
       .sort((a, b) => b.count - a.count || new Date(b.latest.date).getTime() - new Date(a.latest.date).getTime())
       .slice(0, 8)
       .map((g) => g.latest);
   }, [transactions, habitMode, pickerKeys, customList]);
 
+  // Real habits found in the data are more useful than the generic presets
+  // (Coffee, Cigarettes, Netflix…) — so once there's real data for this tab,
+  // only keep showing a preset chip if it's one the user already tracks;
+  // otherwise it just clutters the front of the row with things that may
+  // not apply to them at all. With no real data yet, show every preset so
+  // there's still something to tap.
+  const visiblePresetKeys = useMemo(() => {
+    if (expenseHabitCandidates.length === 0) return pickerKeys;
+    return pickerKeys.filter((k) => trackedOverride(habitMode, k, transactions) !== null);
+  }, [pickerKeys, expenseHabitCandidates, habitMode, transactions]);
+
   function selectExpenseHabit(t: Transaction) {
-    setHabitModeState('daily');
+    const cancelOnly = isCancelOnlyCategory(t.category);
+    setHabitModeState(cancelOnly ? 'subscription' : 'daily');
     setSelectedHabitKey('other');
     setHabitNone(false);
     setFrequency('monthly');
@@ -226,12 +258,22 @@ export default function HomeScreen() {
     setSourceTxId(t.id);
     const monthly = t.recurring ? monthlyEquivalent(t.amount, t.frequency) : t.amount;
     setNowStr(String(round2(monthly)));
-    // Default to a 20%-less starting suggestion instead of making the user
-    // type a number from scratch — a reasonable first cut for everyday
-    // discretionary spending (coffee, lunch, etc), same idea as the preset
-    // habits' built-in now/then gap. They can still pick 40%/Custom instead.
-    setThenStr(String(round2(monthly * 0.8)));
-    setCutChoice('20');
+    if (cancelOnly) {
+      // A fee or a fixed-price subscription isn't reducible by a percentage
+      // — cancelling it (or, via Custom, downgrading to a cheaper plan) is
+      // the only real option, so default straight to that instead of a
+      // "20% less" suggestion that wouldn't make sense here.
+      setThenStr('0');
+      setCutChoice('cancel');
+    } else {
+      // Default to a 20%-less starting suggestion instead of making the
+      // user type a number from scratch — a reasonable first cut for
+      // everyday discretionary spending (coffee, lunch, etc), same idea as
+      // the preset habits' built-in now/then gap. They can still pick
+      // 40%/Custom instead.
+      setThenStr(String(round2(monthly * 0.8)));
+      setCutChoice('20');
+    }
   }
 
   const now = parseFloat(nowStr) || 0;
@@ -322,13 +364,22 @@ export default function HomeScreen() {
   // invisible with a handful of manually-entered rows, but a multi-year CSV
   // import exposed it immediately: $161k "this month" from 600 historical
   // transactions).
-  const income = transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const expense = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  // A "Transfer to/from" line is money moving between the person's OWN
+  // accounts (savings, another bank, PayID) — it's neither real income nor
+  // real spending, so it must not count toward "Current balance" the same
+  // way a real expense or paycheck does. Leaving it in was the actual bug
+  // behind a deeply-negative "Current balance" that didn't match up with
+  // near-equal income/spending for the month: every transfer ever imported
+  // (which can be a very large all-time total) was being subtracted as if
+  // it were real spending.
+  const isRealMoney = (t: Transaction) => t.category !== 'Transfers';
+  const income = transactions.filter((t) => t.type === 'income' && isRealMoney(t)).reduce((s, t) => s + t.amount, 0);
+  const expense = transactions.filter((t) => t.type === 'expense' && isRealMoney(t)).reduce((s, t) => s + t.amount, 0);
   const balance = income - expense;
   const currentMonthKey = appNow().toISOString().slice(0, 7); // "YYYY-MM"
   const isThisMonth = (t: Transaction) => (t.date || '').slice(0, 7) === currentMonthKey;
-  const incomeThisMonth = transactions.filter((t) => t.type === 'income' && isThisMonth(t)).reduce((s, t) => s + t.amount, 0);
-  const expenseThisMonth = transactions.filter((t) => t.type === 'expense' && isThisMonth(t)).reduce((s, t) => s + t.amount, 0);
+  const incomeThisMonth = transactions.filter((t) => t.type === 'income' && isRealMoney(t) && isThisMonth(t)).reduce((s, t) => s + t.amount, 0);
+  const expenseThisMonth = transactions.filter((t) => t.type === 'expense' && isRealMoney(t) && isThisMonth(t)).reduce((s, t) => s + t.amount, 0);
   const recentList = showAllRecent ? transactions : transactions.slice(0, 5);
 
   const byCategory: Record<string, number> = {};
@@ -370,16 +421,17 @@ export default function HomeScreen() {
           </View>
 
           {expenseHabitCandidates.length > 0 ? (
-            <Text style={styles.expenseHint}>Expenses you've logged (like {expenseHabitCandidates[0].name}) show up here too — tap one to track it as a habit.</Text>
+            <Text style={styles.expenseHint}>
+              {habitMode === 'subscription'
+                ? `Recurring fees and subscriptions you've logged (like ${expenseHabitCandidates[0].name}) show up here — tap one to cancel or downgrade it.`
+                : `Expenses that keep repeating (like ${expenseHabitCandidates[0].name}) show up here too — tap one to track it as a habit.`}
+            </Text>
           ) : null}
 
+          {/* Real, data-driven habits lead — a preset chip (Coffee, Netflix…)
+              only fills in when there's nothing real to show yet, or once
+              the user has actually started tracking that exact preset. */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-            {pickerKeys.map((k) => (
-              <Chip key={k} label={HABIT_LABELS[k]} active={selectedHabitKey === k} onPress={() => selectHabit(habitMode, k)} />
-            ))}
-            {customList.map((c) => (
-              <Chip key={c.key} label={`✏️ ${c.label}`} active={selectedHabitKey === c.key} onPress={() => selectHabit(habitMode, c.key)} />
-            ))}
             {expenseHabitCandidates.map((t) => (
               <Chip
                 key={`exp_${t.id}`}
@@ -387,6 +439,12 @@ export default function HomeScreen() {
                 active={selectedHabitKey === 'other' && customName === t.name}
                 onPress={() => selectExpenseHabit(t)}
               />
+            ))}
+            {customList.map((c) => (
+              <Chip key={c.key} label={`✏️ ${c.label}`} active={selectedHabitKey === c.key} onPress={() => selectHabit(habitMode, c.key)} />
+            ))}
+            {visiblePresetKeys.map((k) => (
+              <Chip key={k} label={HABIT_LABELS[k]} active={selectedHabitKey === k} onPress={() => selectHabit(habitMode, k)} />
             ))}
             <Chip label="➕ Other" active={selectedHabitKey === 'other'} onPress={() => selectHabit(habitMode, 'other')} />
           </ScrollView>
@@ -588,11 +646,12 @@ export default function HomeScreen() {
         ) : (
           <View>
             {sortedCats.map(([cat, amt], i) => (
-              <View key={cat} style={{ marginBottom: 12 }}>
+              <Pressable key={cat} style={{ marginBottom: 12 }} onPress={() => setCategoryDrilldown(cat)}>
                 <View style={styles.catRow}>
                   <View style={[styles.catDot, { backgroundColor: categoryColors[i % categoryColors.length] }]} />
                   <Text style={styles.catName}>{cat}</Text>
                   <Text style={styles.catAmt}>{money(amt)}</Text>
+                  <Text style={styles.catChevron}>›</Text>
                 </View>
                 <View style={styles.catBarTrack}>
                   <View
@@ -602,7 +661,7 @@ export default function HomeScreen() {
                     ]}
                   />
                 </View>
-              </View>
+              </Pressable>
             ))}
           </View>
         )}
@@ -626,6 +685,20 @@ export default function HomeScreen() {
       />
       <LoanSheet visible={loanSheetOpen} onClose={() => setLoanSheetOpen(false)} />
       <TrackedImpactModal visible={!!trackedImpact} data={trackedImpact} onClose={() => setTrackedImpact(null)} />
+      <CategoryDrilldownModal
+        visible={!!categoryDrilldown}
+        category={categoryDrilldown}
+        transactions={transactions}
+        onClose={() => setCategoryDrilldown(null)}
+        onEditTransaction={(t) => {
+          setEditingTx(t);
+          setTxSheetOpen(true);
+        }}
+        onBulkRecategorize={(ids, newCategory) => {
+          const idSet = new Set(ids);
+          transactions.filter((t) => idSet.has(t.id)).forEach((t) => updateTransaction({ ...t, category: newCategory }));
+        }}
+      />
     </View>
   );
 }
@@ -707,6 +780,7 @@ const styles = StyleSheet.create({
   catDot: { width: 10, height: 10, borderRadius: 5 },
   catName: { flex: 1, fontSize: 14.5, color: colors.ink },
   catAmt: { fontSize: 14.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.ink },
+  catChevron: { fontSize: 18, color: colors.inkFaint, marginLeft: 6 },
   catBarTrack: { height: 6, backgroundColor: colors.line, borderRadius: 4, overflow: 'hidden', marginTop: 6 },
   catBarFill: { height: '100%', borderRadius: 4 },
   fab: {
