@@ -205,7 +205,7 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
 
   async function runAiCategorize(parsedRows: ParsedRow[]) {
     setAiStatus('checking');
-    const items = parsedRows.map((r, i) => ({ id: String(i), description: r.description, type: r.type }));
+    const items = parsedRows.map((r, i) => ({ id: String(i), description: r.description, type: r.type, amount: r.amount }));
     const outcome = await categorizeWithAI(items);
     if (!outcome.ok) {
       // Every batch failed — say so honestly instead of showing "double

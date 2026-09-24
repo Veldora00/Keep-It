@@ -15,6 +15,10 @@ export interface CategorizeItem {
   id: string;
   description: string;
   type: 'income' | 'expense';
+  // Optional — helps the model distinguish a genuine recurring subscription
+  // (small, plan-shaped amount) from a one-off purchase at the same
+  // merchant. Categorization still works fine without it.
+  amount?: number;
 }
 
 export interface CategorizeOutcome {

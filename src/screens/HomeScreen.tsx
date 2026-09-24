@@ -103,7 +103,7 @@ export default function HomeScreen() {
   const [nowStr, setNowStr] = useState(String(initial.now));
   const [thenStr, setThenStr] = useState(String(initial.then));
   const [frequency, setFrequency] = useState<HabitFrequency>('daily');
-  const [cutChoice, setCutChoice] = useState<'20' | '40' | 'custom' | null>(null);
+  const [cutChoice, setCutChoice] = useState<'20' | '40' | 'custom' | 'cancel' | null>(null);
   const [cutCustomOpen, setCutCustomOpen] = useState(false);
   // Set only when the habit being edited was picked from an already-logged
   // expense (see selectExpenseHabit) — tracking then updates that same
@@ -143,6 +143,17 @@ export default function HomeScreen() {
     setCutCustomOpen(false);
   }
 
+  // Subscriptions are priced in tiers, not a dial — you can't "spend 20%
+  // less" on Netflix, you cancel it or move to a cheaper plan. So the
+  // subscription-mode action is Cancel (jumps straight to $0) or a custom
+  // number for whatever the cheaper plan actually costs, never a
+  // percentage-off button.
+  function cancelSubscription() {
+    setThenStr('0');
+    setCutChoice('cancel');
+    setCutCustomOpen(false);
+  }
+
   function currentHabitLabel(): string {
     if (selectedHabitKey === 'other') {
       return customName.trim() || (habitMode === 'daily' ? 'Custom habit' : 'Custom subscription');
@@ -177,7 +188,11 @@ export default function HomeScreen() {
     const customLabels = new Set(customList.map((c) => c.label.trim().toLowerCase()));
     const groups = new Map<string, { latest: Transaction; count: number }>();
     transactions
-      .filter((t) => t.type === 'expense' && !t.habitTrackKey)
+      // A transfer to your own account (savings, investment, another bank)
+      // isn't a spending habit — it was showing up here as a "habit" chip
+      // purely because it's type 'expense', which was confusing since
+      // there's nothing to cut back on with money you're just moving.
+      .filter((t) => t.type === 'expense' && !t.habitTrackKey && t.category !== 'Transfers')
       .forEach((t) => {
         const nameKey = t.name.trim().toLowerCase();
         if (!nameKey || presetLabels.has(nameKey) || customLabels.has(nameKey)) return;
@@ -211,7 +226,12 @@ export default function HomeScreen() {
     setSourceTxId(t.id);
     const monthly = t.recurring ? monthlyEquivalent(t.amount, t.frequency) : t.amount;
     setNowStr(String(round2(monthly)));
-    setThenStr(String(round2(monthly)));
+    // Default to a 20%-less starting suggestion instead of making the user
+    // type a number from scratch — a reasonable first cut for everyday
+    // discretionary spending (coffee, lunch, etc), same idea as the preset
+    // habits' built-in now/then gap. They can still pick 40%/Custom instead.
+    setThenStr(String(round2(monthly * 0.8)));
+    setCutChoice('20');
   }
 
   const now = parseFloat(nowStr) || 0;
@@ -407,20 +427,35 @@ export default function HomeScreen() {
               {habitMode === 'daily' ? `Try spending (per ${freqNoun})` : `Downgrade to, or cancel (per ${freqNoun})`}
             </Text>
             <View style={styles.cutRow}>
-              <Pressable
-                style={[styles.cutBtn, cutChoice === '20' && styles.cutBtnActive]}
-                onPress={() => applyCut(0.2, '20')}
-              >
-                <Text style={[styles.cutBtnText, cutChoice === '20' && styles.cutBtnTextActive]}>20% less</Text>
-                <Text style={[styles.cutBtnAmt, cutChoice === '20' && styles.cutBtnTextActive]}>{money(now * 0.8)}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.cutBtn, cutChoice === '40' && styles.cutBtnActive]}
-                onPress={() => applyCut(0.4, '40')}
-              >
-                <Text style={[styles.cutBtnText, cutChoice === '40' && styles.cutBtnTextActive]}>40% less</Text>
-                <Text style={[styles.cutBtnAmt, cutChoice === '40' && styles.cutBtnTextActive]}>{money(now * 0.6)}</Text>
-              </Pressable>
+              {habitMode === 'daily' ? (
+                <>
+                  <Pressable
+                    style={[styles.cutBtn, cutChoice === '20' && styles.cutBtnActive]}
+                    onPress={() => applyCut(0.2, '20')}
+                  >
+                    <Text style={[styles.cutBtnText, cutChoice === '20' && styles.cutBtnTextActive]}>20% less</Text>
+                    <Text style={[styles.cutBtnAmt, cutChoice === '20' && styles.cutBtnTextActive]}>{money(now * 0.8)}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.cutBtn, cutChoice === '40' && styles.cutBtnActive]}
+                    onPress={() => applyCut(0.4, '40')}
+                  >
+                    <Text style={[styles.cutBtnText, cutChoice === '40' && styles.cutBtnTextActive]}>40% less</Text>
+                    <Text style={[styles.cutBtnAmt, cutChoice === '40' && styles.cutBtnTextActive]}>{money(now * 0.6)}</Text>
+                  </Pressable>
+                </>
+              ) : (
+                // A subscription is priced in tiers, not a dial — "20% less"
+                // means nothing for a fixed Netflix plan, so this mode offers
+                // Cancel (straight to $0) instead of a percentage cut.
+                <Pressable
+                  style={[styles.cutBtn, cutChoice === 'cancel' && styles.cutBtnActive]}
+                  onPress={cancelSubscription}
+                >
+                  <Text style={[styles.cutBtnText, cutChoice === 'cancel' && styles.cutBtnTextActive]}>Cancel it</Text>
+                  <Text style={[styles.cutBtnAmt, cutChoice === 'cancel' && styles.cutBtnTextActive]}>{money(0)}</Text>
+                </Pressable>
+              )}
               <Pressable
                 style={[styles.cutBtn, cutChoice === 'custom' && styles.cutBtnActive]}
                 onPress={() => {
@@ -428,7 +463,9 @@ export default function HomeScreen() {
                   setCutCustomOpen(true);
                 }}
               >
-                <Text style={[styles.cutBtnText, cutChoice === 'custom' && styles.cutBtnTextActive]}>Custom</Text>
+                <Text style={[styles.cutBtnText, cutChoice === 'custom' && styles.cutBtnTextActive]}>
+                  {habitMode === 'daily' ? 'Custom' : 'Downgrade to…'}
+                </Text>
                 <Text style={[styles.cutBtnAmt, cutChoice === 'custom' && styles.cutBtnTextActive]}>Your number</Text>
               </Pressable>
             </View>

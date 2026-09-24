@@ -70,6 +70,9 @@ export const EXPENSE_CATEGORIES = [
   'Subscriptions',
   'Entertainment',
   'Utilities',
+  'Shopping',
+  'Fees & Charges',
+  'Transfers',
   'Savings',
   'Other',
 ];
@@ -78,6 +81,7 @@ export const INCOME_CATEGORIES = [
   'Side hustle/Freelance',
   'Centrelink/Government payment',
   'Investment/Interest',
+  'Transfers',
   'Gift',
   'Other',
 ];

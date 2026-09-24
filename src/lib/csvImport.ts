@@ -144,19 +144,42 @@ function parseAmount(raw: string): number | null {
 }
 
 // ---------- Category guessing from the description text ----------
+// Checked BEFORE the general keyword list on both sides (expense and
+// income) because it's the most reliable, bank-format-independent signal
+// there is: "Transfer to/from ... [bank] app" and PayID lines are money
+// moving between your own accounts, not real spending or real income, and
+// they'd otherwise dominate the "Other" bucket (and, worse, show up as
+// fake "everyday habit" candidates on Home — see expenseHabitCandidates).
+const TRANSFER_PATTERN = /\btransfer (to|from)\b|\bpayid\b/i;
+// Bank/card fees are a distinct thing from a subscription (a fee isn't a
+// service you chose to sign up for) — giving them their own category keeps
+// them out of "Other" without stretching what "Subscriptions" means.
+const FEE_PATTERN = /\b(card|account|monthly|service|dishonour|late)\s+fee\b|\bfee\b.*\bcard\b|dishonour|overdrawn/i;
+
 const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
   { category: 'Groceries', pattern: /woolworths|coles|aldi|\biga\b|foodworks|harris farm/i },
-  { category: 'Transport', pattern: /uber|didi|opal|myki|fuel|bp\b|caltex|shell|ampol|7-?eleven|linkt|toll/i },
-  { category: 'Subscriptions', pattern: /netflix|spotify|disney|stan\b|amazon prime|youtube premium|apple\.com\/bill|kayo/i },
+  // \bdidi\b (not bare "didi") so a merchant like "DIDIT" (e.g. the Didit
+  // identity-verification service) doesn't false-match the Didi rideshare
+  // keyword just because it starts with the same four letters.
+  { category: 'Transport', pattern: /uber|\bdidi\b|opal|myki|fuel|\bbp\b|caltex|shell|ampol|7-?eleven|linkt|toll/i },
+  {
+    category: 'Subscriptions',
+    pattern:
+      /netflix|spotify|disney|stan\b|amazon prime|youtube premium|apple\.com\/bill|kayo|telegram premium|google\s*\*|google play|discord nitro|icloud|chatgpt|openai/i,
+  },
   { category: 'Utilities', pattern: /energy|electricity|agl|origin|telstra|optus|vodafone|water corp|gas\b/i },
   { category: 'Housing', pattern: /rent|mortgage|strata|real estate/i },
   { category: 'Entertainment', pattern: /cinema|event cinemas|ticketek|ticketmaster|hoyts/i },
+  { category: 'Shopping', pattern: /amazon(?!\s*prime)|ebay|kmart|target|big w|jb hi-?fi|officeworks|bunnings/i },
 ];
 function guessExpenseCategory(description: string): string {
+  if (TRANSFER_PATTERN.test(description)) return 'Transfers';
+  if (FEE_PATTERN.test(description)) return 'Fees & Charges';
   const found = CATEGORY_KEYWORDS.find((k) => k.pattern.test(description));
   return found ? found.category : 'Other';
 }
 function guessIncomeCategory(description: string): string {
+  if (TRANSFER_PATTERN.test(description)) return 'Transfers';
   return /salary|payroll|wages|employer/i.test(description) ? 'Salary/Wages' : 'Other';
 }
 
