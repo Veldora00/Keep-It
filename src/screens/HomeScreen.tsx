@@ -175,20 +175,29 @@ export default function HomeScreen() {
     if (habitMode !== 'daily') return [];
     const presetLabels = new Set(pickerKeys.map((k) => (HABIT_LABELS[k] || '').trim().toLowerCase()));
     const customLabels = new Set(customList.map((c) => c.label.trim().toLowerCase()));
-    const byName = new Map<string, Transaction>();
+    const groups = new Map<string, { latest: Transaction; count: number }>();
     transactions
       .filter((t) => t.type === 'expense' && !t.habitTrackKey)
       .forEach((t) => {
         const nameKey = t.name.trim().toLowerCase();
         if (!nameKey || presetLabels.has(nameKey) || customLabels.has(nameKey)) return;
-        const existing = byName.get(nameKey);
-        if (!existing || new Date(t.date).getTime() > new Date(existing.date).getTime()) {
-          byName.set(nameKey, t);
+        const existing = groups.get(nameKey);
+        if (!existing) {
+          groups.set(nameKey, { latest: t, count: 1 });
+        } else {
+          existing.count += 1;
+          if (new Date(t.date).getTime() > new Date(existing.latest.date).getTime()) existing.latest = t;
         }
       });
-    return Array.from(byName.values())
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 8);
+    // Rank by how OFTEN something recurs, not by whichever single expense
+    // happened most recently — a $6 coffee bought every other day is a
+    // habit; a one-off $400 purchase last week isn't, even though it'd win
+    // a most-recent sort. This is plain counting, not an AI call: no reason
+    // to spend a model on something a tally already gets right for free.
+    return Array.from(groups.values())
+      .sort((a, b) => b.count - a.count || new Date(b.latest.date).getTime() - new Date(a.latest.date).getTime())
+      .slice(0, 8)
+      .map((g) => g.latest);
   }, [transactions, habitMode, pickerKeys, customList]);
 
   function selectExpenseHabit(t: Transaction) {

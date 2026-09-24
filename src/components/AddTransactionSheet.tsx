@@ -8,6 +8,7 @@ import { PrimaryButton } from './ui';
 import { useStore } from '../lib/store';
 import { money } from '../lib/calculations';
 import { parseBankCsv, ParsedRow } from '../lib/csvImport';
+import { categorizeWithAI } from '../lib/aiCategorize';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Frequency, Transaction, TxType } from '../lib/types';
 
 const FREQ_OPTIONS_EXPENSE = ['Weekly', 'Fortnightly', 'Monthly', 'Annually'];
@@ -187,12 +188,37 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // AI categorization runs in the background after the keyword-guessed rows
+  // are already on screen — never blocks the review list from showing up,
+  // and quietly upgrades any row the user hasn't touched yet when it lands.
+  const [aiStatus, setAiStatus] = useState<'idle' | 'checking' | 'done'>('idle');
+  const editedRowsRef = React.useRef<Set<number>>(new Set());
 
   function reset() {
     setRows(null);
     setFileName('');
     setError('');
     setBusy(false);
+    setAiStatus('idle');
+    editedRowsRef.current = new Set();
+  }
+
+  async function runAiCategorize(parsedRows: ParsedRow[]) {
+    setAiStatus('checking');
+    const items = parsedRows.map((r, i) => ({ id: String(i), description: r.description, type: r.type }));
+    const results = await categorizeWithAI(items);
+    if (results.size > 0) {
+      setRows((prev) =>
+        prev
+          ? prev.map((r, i) => {
+              if (editedRowsRef.current.has(i)) return r; // don't clobber a manual fix
+              const aiCategory = results.get(String(i));
+              return aiCategory ? { ...r, category: aiCategory } : r;
+            })
+          : prev
+      );
+    }
+    setAiStatus('done');
   }
 
   async function pickFile() {
@@ -215,6 +241,7 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
       setFileName(asset.name || 'statement.csv');
       setRows(parsed.rows);
       setBusy(false);
+      runAiCategorize(parsed.rows);
     } catch (e) {
       setError('Could not read that file. Try exporting a fresh CSV from your bank and pick it again.');
       setBusy(false);
@@ -226,6 +253,7 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
   }
 
   function setCategory(i: number, category: string) {
+    editedRowsRef.current.add(i);
     setRows((prev) => (prev ? prev.map((r, idx) => (idx === i ? { ...r, category } : r)) : prev));
   }
 
@@ -270,6 +298,8 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
       <Text style={styles.helpText}>
         {fileName} — found {rows.length} transaction{rows.length === 1 ? '' : 's'}. Untick anything that shouldn't be
         imported, and fix a category if the guess is wrong.
+        {aiStatus === 'checking' ? ' 🤖 Double-checking categories with AI…' : ''}
+        {aiStatus === 'done' ? ' 🤖 Categories double-checked with AI.' : ''}
       </Text>
       <ScrollView style={styles.rowScroll}>
         {rows.map((r, i) => (
