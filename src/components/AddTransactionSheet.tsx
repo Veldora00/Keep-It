@@ -191,7 +191,7 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
   // AI categorization runs in the background after the keyword-guessed rows
   // are already on screen — never blocks the review list from showing up,
   // and quietly upgrades any row the user hasn't touched yet when it lands.
-  const [aiStatus, setAiStatus] = useState<'idle' | 'checking' | 'done'>('idle');
+  const [aiStatus, setAiStatus] = useState<'idle' | 'checking' | 'done' | 'unavailable'>('idle');
   const editedRowsRef = React.useRef<Set<number>>(new Set());
 
   function reset() {
@@ -206,13 +206,22 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
   async function runAiCategorize(parsedRows: ParsedRow[]) {
     setAiStatus('checking');
     const items = parsedRows.map((r, i) => ({ id: String(i), description: r.description, type: r.type }));
-    const results = await categorizeWithAI(items);
-    if (results.size > 0) {
+    const outcome = await categorizeWithAI(items);
+    if (!outcome.ok) {
+      // Every batch failed — say so honestly instead of showing "double
+      // checked" text for a call that never actually reached the model.
+      // See devtools console for the underlying error (CORS, missing
+      // OPENAI_API_KEY secret, an OpenAI error, etc).
+      if (outcome.firstError) console.warn('[CsvImportBody] AI categorization unavailable:', outcome.firstError);
+      setAiStatus('unavailable');
+      return;
+    }
+    if (outcome.results.size > 0) {
       setRows((prev) =>
         prev
           ? prev.map((r, i) => {
               if (editedRowsRef.current.has(i)) return r; // don't clobber a manual fix
-              const aiCategory = results.get(String(i));
+              const aiCategory = outcome.results.get(String(i));
               return aiCategory ? { ...r, category: aiCategory } : r;
             })
           : prev
@@ -300,6 +309,7 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
         imported, and fix a category if the guess is wrong.
         {aiStatus === 'checking' ? ' 🤖 Double-checking categories with AI…' : ''}
         {aiStatus === 'done' ? ' 🤖 Categories double-checked with AI.' : ''}
+        {aiStatus === 'unavailable' ? ' AI check unavailable right now — using keyword-guessed categories below.' : ''}
       </Text>
       <ScrollView style={styles.rowScroll}>
         {rows.map((r, i) => (

@@ -43,13 +43,20 @@ interface Item {
   type: "income" | "expense";
 }
 
+// The app calls this from a browser (both the Artifact preview and the EAS
+// web build run as plain web pages), so the browser sends a CORS preflight
+// OPTIONS request before the real POST — missing Access-Control-Allow-
+// Methods here made that preflight fail, which silently killed every call
+// before it ever reached this function (no request ever reached OpenAI,
+// which is exactly what an empty usage dashboard looks like).
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { status: 200, headers: corsHeaders });
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,

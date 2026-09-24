@@ -17,6 +17,20 @@ export interface CategorizeItem {
   type: 'income' | 'expense';
 }
 
+export interface CategorizeOutcome {
+  results: Map<string, string>;
+  // False if EVERY batch failed (network/CORS error, function not deployed,
+  // OpenAI key missing, etc). The caller uses this to tell the user "AI
+  // check didn't run" instead of falsely claiming success just because the
+  // call was attempted — a silent failure here previously looked identical
+  // to a successful-but-unchanged result in the UI.
+  ok: boolean;
+  // First error message seen, logged to the console for debugging (e.g. a
+  // CORS failure, a missing OPENAI_API_KEY, an OpenAI error) — never shown
+  // to the user as a raw error, just useful when checking devtools.
+  firstError?: string;
+}
+
 const BATCH_SIZE = 40;
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -25,28 +39,38 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-// Returns a Map of id -> category for every item the AI could confidently
-// place in that item's own allowed category list. Missing ids (network
-// failure on that batch, function not configured, etc.) simply aren't in
-// the map — the caller keeps whatever guess it already had for those.
-export async function categorizeWithAI(items: CategorizeItem[]): Promise<Map<string, string>> {
+export async function categorizeWithAI(items: CategorizeItem[]): Promise<CategorizeOutcome> {
   const results = new Map<string, string>();
   const batches = chunk(items, BATCH_SIZE);
+  let succeededBatches = 0;
+  let firstError: string | undefined;
+
   await Promise.all(
     batches.map(async (batch) => {
       try {
         const { data, error } = await supabase.functions.invoke('categorize-transactions', {
           body: { items: batch },
         });
-        if (error || !data?.results) return;
+        if (error) {
+          if (!firstError) firstError = error.message || String(error);
+          console.warn('[categorizeWithAI] edge function error:', error);
+          return;
+        }
+        if (!data?.results) {
+          if (!firstError) firstError = 'No results in response';
+          console.warn('[categorizeWithAI] unexpected response shape:', data);
+          return;
+        }
+        succeededBatches++;
         for (const r of data.results as { id: string; category: string }[]) {
           results.set(r.id, r.category);
         }
-      } catch {
-        // Network hiccup or function unavailable — this batch's rows just
-        // keep their keyword-guessed category.
+      } catch (e) {
+        if (!firstError) firstError = e instanceof Error ? e.message : String(e);
+        console.warn('[categorizeWithAI] threw:', e);
       }
     })
   );
-  return results;
+
+  return { results, ok: succeededBatches > 0, firstError };
 }
