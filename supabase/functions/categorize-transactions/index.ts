@@ -20,6 +20,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const EXPENSE_CATEGORIES = [
   "Housing",
   "Groceries",
+  "Eat out",
   "Transport",
   "Subscriptions",
   "Entertainment",
@@ -135,11 +136,13 @@ Deno.serve(async (req: Request) => {
               "You categorize Australian bank transaction descriptions for a personal budgeting app. For each line, pick exactly ONE category from that line's own 'allowed' list — never a category outside it, never a new one.\n" +
               "\n" +
               "Rules of thumb, in priority order:\n" +
-              "1. A line saying 'Transfer to'/'Transfer from' another account, or naming PayID, is money moving between the person's own accounts, not real spending or income — that's Transfers, even if you don't recognise the account name.\n" +
-              "2. A bank/card/account fee (the word 'fee', a dishonour or overdrawn line) is Fees & Charges, not Subscriptions — a fee isn't a service someone chose to sign up for.\n" +
-              "3. A billing line routed through an app store — starting with 'GOOGLE *', 'GOOGLE PLAY', 'APPLE.COM/BILL', or naming a known app/streaming/software service (Netflix, Spotify, Disney+, Telegram Premium, Discord Nitro, ChatGPT/OpenAI, iCloud, a gym or phone plan, etc) — is Subscriptions, even if the merchant text is garbled or has extra location/card-number text appended. A small amount that repeats monthly is a strong Subscriptions signal too.\n" +
-              "4. Otherwise match by what the merchant actually sells: a supermarket chain is Groceries, a general retailer (Amazon, eBay, department/hardware store) is Shopping, a cinema/ticketing site is Entertainment, an energy/telco provider is Utilities, rent/mortgage/strata is Housing, fuel/rideshare/tolls/public transport is Transport.\n" +
-              "5. Use Other only when the description genuinely gives no signal at all (e.g. a cryptic reference number with no merchant name) — it should be your last resort, not a default.\n" +
+              "1. A line saying 'Transfer to'/'Transfer from' another account, naming PayID, or a credit-union/bank 'Member Net transfer' between the person's own accounts, is money moving between accounts they own, not real spending or income — that's Transfers, even if you don't recognise the account name.\n" +
+              "2. A payment going to a stockbroker or trading/investment platform (Interactive Brokers, Webull, CommSec, Superhero, Selfwealth, a superannuation fund like AMP/AustralianSuper, etc) is Savings — it's money being put toward investing, not spending or an internal cash transfer.\n" +
+              "3. A bank/card/account fee (the word 'fee', a dishonour or overdrawn line) is Fees & Charges, not Subscriptions — a fee isn't a service someone chose to sign up for.\n" +
+              "4. A billing line routed through an app store — starting with 'GOOGLE *', 'GOOGLE PLAY', 'APPLE.COM/BILL', or naming a known app/streaming/software service (Netflix, Spotify, Disney+, Telegram Premium, Discord Nitro, ChatGPT/OpenAI, iCloud, a gym or phone plan, etc) — is Subscriptions, even if the merchant text is garbled or has extra location/card-number text appended. A small amount that repeats monthly is a strong Subscriptions signal too.\n" +
+              "5. A restaurant, takeaway, fast-food chain, cafe, or food-delivery service (KFC, McDonald's, Uber Eats, Menulog, DoorDash, a named cafe/bakery/pizza/sushi/BBQ place, etc) is Eat out — this is different from Groceries (a supermarket) and from Entertainment.\n" +
+              "6. Otherwise match by what the merchant actually sells: a supermarket chain is Groceries, a general retailer (Amazon, eBay, a clothing/shoe/electronics brand, department/hardware store) is Shopping, a cinema/ticketing site is Entertainment, an energy/telco provider is Utilities, rent/mortgage/strata is Housing, fuel/rideshare/tolls/public transport is Transport.\n" +
+              "7. Use Other only when the description genuinely gives no signal at all (e.g. a cryptic reference number with no merchant name) — it should be your last resort, not a default.\n" +
               "An 'amount' may be given for extra context (e.g. a small recurring-looking amount supports Subscriptions), but the description is the primary signal.",
           },
           { role: "user", content: prompt },

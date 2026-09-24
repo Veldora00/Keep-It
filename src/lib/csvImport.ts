@@ -90,6 +90,33 @@ function headerScore(row: string[]): number {
   return hints;
 }
 
+// Some exports have MORE THAN ONE column with "date" in its name — e.g.
+// "Effective Date" (often blank until the transaction settles) alongside
+// "Entered Date" (always filled in). Just taking the first column whose
+// header matches /date/ picked the blank one and silently dropped every
+// single row, which looked like the whole file was "ignored". Instead,
+// when there's more than one date-like column, actually try parsing a
+// sample of real data rows in each candidate and keep whichever one
+// produces the most valid dates.
+function bestDateColumn(rows: string[][], headerRowIdx: number, headers: string[]): number {
+  const candidates: number[] = [];
+  headers.forEach((h, i) => {
+    if (/date/.test(h)) candidates.push(i);
+  });
+  if (candidates.length <= 1) return candidates[0] ?? -1;
+  const sample = rows.slice(headerRowIdx + 1, headerRowIdx + 1 + 20);
+  let best = candidates[0];
+  let bestCount = -1;
+  for (const i of candidates) {
+    const count = sample.filter((r) => parseDate(r[i] ?? '') !== null).length;
+    if (count > bestCount) {
+      bestCount = count;
+      best = i;
+    }
+  }
+  return best;
+}
+
 function detectColumns(rows: string[][]): { map: ColumnMap; startRow: number } {
   // Some exports prepend a line or two before the real header — an account
   // name, "Transactions from X to Y", a blank-ish disclaimer row. Trusting
@@ -109,7 +136,7 @@ function detectColumns(rows: string[][]): { map: ColumnMap; startRow: number } {
   }
   if (bestIdx >= 0) {
     const headers = rows[bestIdx].map((h) => h.toLowerCase());
-    const dateIdx = matchCol(headers, [/^date$/, /date/]);
+    const dateIdx = bestDateColumn(rows, bestIdx, headers);
     const descIdx = matchCol(headers, [/^description$/, /description|narrative|details|reference|merchant/]);
     const amountIdx = matchCol(headers, [/^amount$/, /amount/]);
     const debitIdx = matchCol(headers, [/debit|withdrawal|money out/]);
@@ -180,7 +207,7 @@ function parseAmount(raw: string): number | null {
 // moving between your own accounts, not real spending or real income, and
 // they'd otherwise dominate the "Other" bucket (and, worse, show up as
 // fake "everyday habit" candidates on Home — see expenseHabitCandidates).
-const TRANSFER_PATTERN = /\btransfer (to|from)\b|\bpayid\b/i;
+const TRANSFER_PATTERN = /\btransfer (to|from)\b|\bpayid\b|\bmember net transfer\b/i;
 // Bank/card fees are a distinct thing from a subscription (a fee isn't a
 // service you chose to sign up for) — giving them their own category keeps
 // them out of "Other" without stretching what "Subscriptions" means.
@@ -188,6 +215,13 @@ const FEE_PATTERN = /\b(card|account|monthly|service|dishonour|late)\s+fee\b|\bf
 
 const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
   { category: 'Groceries', pattern: /woolworths|coles|aldi|\biga\b|foodworks|harris farm/i },
+  // Checked before Transport so "UBER EATS" lands here and not on the plain
+  // "uber" match below (which is meant for Uber the rideshare trip).
+  {
+    category: 'Eat out',
+    pattern:
+      /kfc|mcdonald|hungry jacks?|domino'?s?|subway|guzman|nando'?s?|grill'?d|oporto|red rooster|uber\s*eats|menulog|doordash|deliveroo|\bcafe\b|\bbakery\b|\bsushi\b|\bpizza\b|\bkebab\b|\bbbq\b|restaurant/i,
+  },
   // \bdidi\b (not bare "didi") so a merchant like "DIDIT" (e.g. the Didit
   // identity-verification service) doesn't false-match the Didi rideshare
   // keyword just because it starts with the same four letters.
@@ -200,7 +234,11 @@ const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
   { category: 'Utilities', pattern: /energy|electricity|agl|origin|telstra|optus|vodafone|water corp|gas\b/i },
   { category: 'Housing', pattern: /rent|mortgage|strata|real estate/i },
   { category: 'Entertainment', pattern: /cinema|event cinemas|ticketek|ticketmaster|hoyts/i },
-  { category: 'Shopping', pattern: /amazon(?!\s*prime)|ebay|kmart|target|big w|jb hi-?fi|officeworks|bunnings/i },
+  {
+    category: 'Shopping',
+    pattern:
+      /amazon(?!\s*prime)|ebay|kmart|target|big\s*w|jb\s*hi-?fi|officeworks|bunnings|new balance|ray-?ban|allbids|\bnike\b|\badidas\b|cotton on|\bmyer\b|david jones/i,
+  },
 ];
 function guessExpenseCategory(description: string): string {
   if (TRANSFER_PATTERN.test(description)) return 'Transfers';
@@ -210,7 +248,9 @@ function guessExpenseCategory(description: string): string {
 }
 function guessIncomeCategory(description: string): string {
   if (TRANSFER_PATTERN.test(description)) return 'Transfers';
-  return /salary|payroll|wages|employer/i.test(description) ? 'Salary/Wages' : 'Other';
+  if (/salary|payroll|wages|employer/i.test(description)) return 'Salary/Wages';
+  if (/interest/i.test(description)) return 'Investment/Interest';
+  return 'Other';
 }
 
 export interface ImportResult {

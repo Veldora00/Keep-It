@@ -66,6 +66,7 @@ export type DailyLogs = Record<string, Record<string, boolean>>;
 export const EXPENSE_CATEGORIES = [
   'Housing',
   'Groceries',
+  'Eat out',
   'Transport',
   'Subscriptions',
   'Entertainment',
