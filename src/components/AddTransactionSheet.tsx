@@ -222,7 +222,17 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
           ? prev.map((r, i) => {
               if (editedRowsRef.current.has(i)) return r; // don't clobber a manual fix
               const aiCategory = outcome.results.get(String(i));
-              return aiCategory ? { ...r, category: aiCategory } : r;
+              if (!aiCategory) return r;
+              // "Other" is the AI's least-confident answer — a last resort
+              // when it truly has no signal. It should never overwrite a
+              // keyword guess that's already specific (e.g. the keyword
+              // list correctly matched "Shopping" for an Amazon purchase,
+              // but the AI came back "Other" for that same row) — that was
+              // silently downgrading good keyword guesses to Other. Only
+              // apply the AI's "Other" when the keyword guess was ALSO
+              // Other, i.e. neither has a real answer.
+              if (aiCategory === 'Other' && r.category !== 'Other') return r;
+              return { ...r, category: aiCategory };
             })
           : prev
       );
