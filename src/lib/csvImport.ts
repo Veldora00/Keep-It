@@ -70,10 +70,6 @@ interface ColumnMap {
 
 const HEADER_HINTS = /date|amount|description|details|narrative|debit|credit|balance|reference/i;
 
-function looksLikeHeader(row: string[]): boolean {
-  return row.some((cell) => HEADER_HINTS.test(cell.trim()) && !/^-?\$?[\d,.]+$/.test(cell.trim()));
-}
-
 function matchCol(headers: string[], patterns: RegExp[]): number {
   for (const pattern of patterns) {
     const idx = headers.findIndex((h) => pattern.test(h.trim()));
@@ -82,28 +78,62 @@ function matchCol(headers: string[], patterns: RegExp[]): number {
   return -1;
 }
 
+// How "header-like" a row is — counts cells that mention a real column
+// keyword (and aren't just a plain number). Used to pick out the actual
+// header row from several candidates, not just trust row 0.
+function headerScore(row: string[]): number {
+  let hints = 0;
+  for (const cell of row) {
+    const c = cell.trim();
+    if (c && HEADER_HINTS.test(c) && !/^-?\$?[\d,.]+$/.test(c)) hints++;
+  }
+  return hints;
+}
+
 function detectColumns(rows: string[][]): { map: ColumnMap; startRow: number } {
-  const first = rows[0] || [];
-  if (looksLikeHeader(first)) {
-    const headers = first.map((h) => h.toLowerCase());
+  // Some exports prepend a line or two before the real header — an account
+  // name, "Transactions from X to Y", a blank-ish disclaimer row. Trusting
+  // only rows[0] meant a single stray leading row derailed column detection
+  // for the *entire* file (wrong columns → every date/amount fails to parse
+  // → the import looks like it "just stops"). Scan the first several rows
+  // instead and use whichever one most looks like an actual header.
+  const scanLimit = Math.min(rows.length, 5);
+  let bestIdx = -1;
+  let bestScore = 0;
+  for (let i = 0; i < scanLimit; i++) {
+    const score = headerScore(rows[i]);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx >= 0) {
+    const headers = rows[bestIdx].map((h) => h.toLowerCase());
     const dateIdx = matchCol(headers, [/^date$/, /date/]);
     const descIdx = matchCol(headers, [/^description$/, /description|narrative|details|reference|merchant/]);
     const amountIdx = matchCol(headers, [/^amount$/, /amount/]);
     const debitIdx = matchCol(headers, [/debit|withdrawal|money out/]);
     const creditIdx = matchCol(headers, [/credit|deposit|money in/]);
-    return {
-      map: {
-        dateIdx: dateIdx >= 0 ? dateIdx : 0,
-        descIdx: descIdx >= 0 ? descIdx : 2,
-        amountIdx: amountIdx >= 0 ? amountIdx : null,
-        debitIdx: debitIdx >= 0 ? debitIdx : null,
-        creditIdx: creditIdx >= 0 ? creditIdx : null,
-      },
-      startRow: 1,
-    };
+    // Only trust this as the real header if it actually named a date column
+    // plus some way to get an amount — a title row that merely contains the
+    // word "date" in passing shouldn't count.
+    if (dateIdx >= 0 && (amountIdx >= 0 || debitIdx >= 0 || creditIdx >= 0)) {
+      return {
+        map: {
+          dateIdx,
+          descIdx: descIdx >= 0 ? descIdx : 2,
+          amountIdx: amountIdx >= 0 ? amountIdx : null,
+          debitIdx: debitIdx >= 0 ? debitIdx : null,
+          creditIdx: creditIdx >= 0 ? creditIdx : null,
+        },
+        startRow: bestIdx + 1,
+      };
+    }
   }
-  // No header — assume the classic CommBank NetBank export layout:
-  // Date, Amount, Description, Balance.
+  // No trustworthy header found — assume the classic CommBank NetBank
+  // layout (Date, Amount, Description, Balance) with no header row at all.
+  // Any stray leading rows are naturally skipped further down since they
+  // won't parse as a valid date + amount.
   return {
     map: { dateIdx: 0, amountIdx: 1, descIdx: 2, debitIdx: null, creditIdx: null },
     startRow: 0,
