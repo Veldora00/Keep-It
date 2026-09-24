@@ -66,6 +66,16 @@ interface ColumnMap {
   amountIdx: number | null;
   debitIdx: number | null;
   creditIdx: number | null;
+  // True for credit-card-style exports (detected via a "Card Member" column,
+  // an Amex signature) where the sign convention is the OPPOSITE of a normal
+  // bank transaction/checking account: a purchase posts as a POSITIVE amount
+  // (it increases what you owe) and a payment/refund/credit posts negative.
+  // A normal bank CSV is the other way round (negative = money out). Without
+  // this, every real purchase in a credit-card export (Amazon, Uber, KFC...)
+  // came out positive and got treated as "income" — which has no Shopping/
+  // Eat out/etc categories to offer, so it silently fell into Other no
+  // matter how good the keyword list or the AI was.
+  creditCardSign: boolean;
 }
 
 const HEADER_HINTS = /date|amount|description|details|narrative|debit|credit|balance|reference/i;
@@ -141,6 +151,7 @@ function detectColumns(rows: string[][]): { map: ColumnMap; startRow: number } {
     const amountIdx = matchCol(headers, [/^amount$/, /amount/]);
     const debitIdx = matchCol(headers, [/debit|withdrawal|money out/]);
     const creditIdx = matchCol(headers, [/credit|deposit|money in/]);
+    const creditCardSign = headers.some((h) => /card\s*member|cardholder/.test(h));
     // Only trust this as the real header if it actually named a date column
     // plus some way to get an amount — a title row that merely contains the
     // word "date" in passing shouldn't count.
@@ -152,6 +163,7 @@ function detectColumns(rows: string[][]): { map: ColumnMap; startRow: number } {
           amountIdx: amountIdx >= 0 ? amountIdx : null,
           debitIdx: debitIdx >= 0 ? debitIdx : null,
           creditIdx: creditIdx >= 0 ? creditIdx : null,
+          creditCardSign,
         },
         startRow: bestIdx + 1,
       };
@@ -162,7 +174,7 @@ function detectColumns(rows: string[][]): { map: ColumnMap; startRow: number } {
   // Any stray leading rows are naturally skipped further down since they
   // won't parse as a valid date + amount.
   return {
-    map: { dateIdx: 0, amountIdx: 1, descIdx: 2, debitIdx: null, creditIdx: null },
+    map: { dateIdx: 0, amountIdx: 1, descIdx: 2, debitIdx: null, creditIdx: null, creditCardSign: false },
     startRow: 0,
   };
 }
@@ -214,7 +226,7 @@ const TRANSFER_PATTERN = /\btransfer (to|from)\b|\bpayid\b|\bmember net transfer
 const FEE_PATTERN = /\b(card|account|monthly|service|dishonour|late)\s+fee\b|\bfee\b.*\bcard\b|dishonour|overdrawn/i;
 
 const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
-  { category: 'Groceries', pattern: /woolworths|coles|aldi|\biga\b|foodworks|harris farm/i },
+  { category: 'Groceries', pattern: /woolworths|coles|aldi|\biga\b|foodworks|harris farm|fresh city|farmers market|greengrocer/i },
   // Checked before Transport so "UBER EATS" lands here and not on the plain
   // "uber" match below (which is meant for Uber the rideshare trip).
   {
@@ -272,9 +284,14 @@ export function parseBankCsv(text: string): ImportResult {
     const description = (r[map.descIdx] ?? '').trim() || 'Transaction';
 
     let amount: number | null = null;
+    // A debit/credit split is already unambiguous (credit column = money in,
+    // debit column = money out), so the credit-card sign flip below only
+    // applies to the single signed "Amount" column case.
+    let usedSplitColumns = false;
     if (map.amountIdx != null) {
       amount = parseAmount(r[map.amountIdx] ?? '');
     } else if (map.debitIdx != null || map.creditIdx != null) {
+      usedSplitColumns = true;
       const debit = map.debitIdx != null ? parseAmount(r[map.debitIdx] ?? '') : null;
       const credit = map.creditIdx != null ? parseAmount(r[map.creditIdx] ?? '') : null;
       if (credit) amount = Math.abs(credit);
@@ -282,7 +299,14 @@ export function parseBankCsv(text: string): ImportResult {
     }
     if (!date || amount == null || amount === 0) continue;
 
-    const type: 'income' | 'expense' = amount > 0 ? 'income' : 'expense';
+    // Credit-card exports (Amex etc) post a purchase as POSITIVE (it adds to
+    // what you owe) and a payment/refund as negative — the opposite of a
+    // normal bank account, where negative is money leaving. Flip which sign
+    // means "expense" for those files so real purchases don't get funnelled
+    // into the income category list (which has no Shopping/Eat out/etc and
+    // silently dumps everything into Other).
+    const isExpense = map.creditCardSign && !usedSplitColumns ? amount > 0 : amount < 0;
+    const type: 'income' | 'expense' = isExpense ? 'expense' : 'income';
     const category = type === 'income' ? guessIncomeCategory(description) : guessExpenseCategory(description);
     out.push({ date, description, amount, rawDate, category, type, include: true });
   }
