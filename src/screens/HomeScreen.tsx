@@ -159,6 +159,46 @@ export default function HomeScreen() {
     setThenStr(String(then));
   }
 
+  const pickerKeys = HABIT_PRESET_KEYS[habitMode];
+  const customList = customHabits[habitMode] || [];
+
+  // Groceries, utilities, whatever else gets logged via "+ Add transaction"
+  // are habits too — surface them as extra picker chips (Everyday habit only,
+  // since that's what they mostly are) instead of leaving them only
+  // reachable through "+ Other" by retyping the name from scratch.
+  const expenseHabitCandidates = useMemo(() => {
+    if (habitMode !== 'daily') return [];
+    const presetLabels = new Set(pickerKeys.map((k) => (HABIT_LABELS[k] || '').trim().toLowerCase()));
+    const customLabels = new Set(customList.map((c) => c.label.trim().toLowerCase()));
+    const byName = new Map<string, Transaction>();
+    transactions
+      .filter((t) => t.type === 'expense' && !t.habitTrackKey)
+      .forEach((t) => {
+        const nameKey = t.name.trim().toLowerCase();
+        if (!nameKey || presetLabels.has(nameKey) || customLabels.has(nameKey)) return;
+        const existing = byName.get(nameKey);
+        if (!existing || new Date(t.date).getTime() > new Date(existing.date).getTime()) {
+          byName.set(nameKey, t);
+        }
+      });
+    return Array.from(byName.values())
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 8);
+  }, [transactions, habitMode, pickerKeys, customList]);
+
+  function selectExpenseHabit(t: Transaction) {
+    setHabitModeState('daily');
+    setSelectedHabitKey('other');
+    setHabitNone(false);
+    setFrequency('monthly');
+    setCutChoice(null);
+    setCutCustomOpen(false);
+    setCustomName(t.name);
+    const monthly = t.recurring ? monthlyEquivalent(t.amount, t.frequency) : t.amount;
+    setNowStr(String(round2(monthly)));
+    setThenStr(String(round2(monthly)));
+  }
+
   const now = parseFloat(nowStr) || 0;
   const then = parseFloat(thenStr) || 0;
   const saving = Math.max(0, now - then);
@@ -248,9 +288,6 @@ export default function HomeScreen() {
   const catTotal = Object.values(byCategory).reduce((a, b) => a + b, 0);
   const sortedCats = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
 
-  const pickerKeys = HABIT_PRESET_KEYS[habitMode];
-  const customList = customHabits[habitMode] || [];
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.paperWarm }}>
       <ScrollView contentContainerStyle={styles.screen}>
@@ -282,12 +319,24 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
+          {expenseHabitCandidates.length > 0 ? (
+            <Text style={styles.expenseHint}>Expenses you've logged (like {expenseHabitCandidates[0].name}) show up here too — tap one to track it as a habit.</Text>
+          ) : null}
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
             {pickerKeys.map((k) => (
               <Chip key={k} label={HABIT_LABELS[k]} active={selectedHabitKey === k} onPress={() => selectHabit(habitMode, k)} />
             ))}
             {customList.map((c) => (
               <Chip key={c.key} label={`✏️ ${c.label}`} active={selectedHabitKey === c.key} onPress={() => selectHabit(habitMode, c.key)} />
+            ))}
+            {expenseHabitCandidates.map((t) => (
+              <Chip
+                key={`exp_${t.id}`}
+                label={`🧾 ${t.name}`}
+                active={selectedHabitKey === 'other' && customName === t.name}
+                onPress={() => selectExpenseHabit(t)}
+              />
             ))}
             <Chip label="➕ Other" active={selectedHabitKey === 'other'} onPress={() => selectHabit(habitMode, 'other')} />
           </ScrollView>
@@ -524,6 +573,7 @@ const styles = StyleSheet.create({
   habitModeText: { fontSize: 14, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim },
   habitModeExpenseActiveText: { color: colors.red },
   habitModeIncomeActiveText: { color: colors.accentDeep },
+  expenseHint: { fontSize: 11.5, color: colors.inkFaint, marginBottom: 8, lineHeight: 15 },
   freqRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 14 },
   // Groups "you spend now" + "try spending" into one visually distinct block
   // (its own card, its own background) instead of the two fields just

@@ -37,7 +37,19 @@ export function Field({
 }
 
 export function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <View style={styles.fieldGrid}>{children}</View>;
+  // The two-column layout belongs to the grid, not to Field itself — wrap
+  // each child in the flex/minWidth item style here instead of baking it
+  // into Field's own base style. A standalone Field (used outside a grid,
+  // like Home's "What is it called?") used to inherit flex: 1 anyway, which
+  // in a plain vertical Card makes it stretch to fill the Card's leftover
+  // height, overlapping whatever renders right after it.
+  return (
+    <View style={styles.fieldGrid}>
+      {React.Children.map(children, (child) => (
+        <View style={styles.fieldGridItem}>{child}</View>
+      ))}
+    </View>
+  );
 }
 
 export function SelectField({
@@ -93,8 +105,9 @@ export function CheckRow({ label, checked, onToggle }: { label: string; checked:
 }
 
 const styles = StyleSheet.create({
-  field: { marginBottom: 14, flex: 1, minWidth: '45%' },
+  field: { marginBottom: 14 },
   fieldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  fieldGridItem: { flex: 1, minWidth: '45%' },
   label: { fontSize: 12.5, fontFamily: fonts.sansSemiBold, fontWeight: '600', color: colors.inkDim, marginBottom: 6 },
   input: {
     borderWidth: 1,
