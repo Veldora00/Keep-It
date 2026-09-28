@@ -94,6 +94,73 @@ export function computeRefundedExpenseIds(transactions: Transaction[]): Set<numb
   return refundedIds;
 }
 
+export interface RecurringCandidate {
+  key: string;
+  name: string;
+  type: TxType;
+  category: string;
+  amount: number;
+  frequency: Frequency;
+}
+
+// CSV-imported transactions never carry the `recurring` flag — that's a
+// manual, per-transaction toggle (set by hand in the add/edit sheet, or by
+// the Home "everyday habit" switches). That meant Forecast only ever saw
+// hand-flagged items and never noticed a salary, a subscription, or a
+// regular investment transfer that came in through an import, even though
+// the exact same name+amount shows up every payslip. This detects that
+// repetition straight from history instead of requiring the user to flag
+// anything: group same-name, same-direction transactions, and when 3+ of
+// them land at a roughly consistent interval (weekly/fortnightly/monthly/
+// annually, +/-35% tolerance on the gap) with a similar amount (within 20%
+// of the median), treat it as a detected recurring item. Read-only — it
+// never mutates a transaction or writes `recurring: true` anywhere; callers
+// combine this with the manually-flagged list for projections/display.
+export function detectRecurringCandidates(transactions: Transaction[]): RecurringCandidate[] {
+  const groups = new Map<string, Transaction[]>();
+  for (const t of transactions) {
+    if (t.category === 'Transfers') continue; // moving between your own accounts isn't a recurring bill or income
+    const key = `${t.type}|${t.name.trim().toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(t);
+  }
+
+  const candidates: RecurringCandidate[] = [];
+  for (const [key, txs] of groups) {
+    if (txs.length < 3) continue;
+    const sorted = [...txs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const amounts = [...sorted.map((t) => t.amount)].sort((a, b) => a - b);
+    const medianAmount = amounts[Math.floor(amounts.length / 2)];
+    if (!(medianAmount > 0)) continue;
+    const consistentAmount = sorted.every((t) => Math.abs(t.amount - medianAmount) / medianAmount <= 0.2);
+    if (!consistentAmount) continue;
+
+    const gaps: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const days = (new Date(sorted[i].date).getTime() - new Date(sorted[i - 1].date).getTime()) / 86400000;
+      if (days > 0) gaps.push(days);
+    }
+    if (gaps.length === 0) continue;
+    const sortedGaps = [...gaps].sort((a, b) => a - b);
+    const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)];
+    if (!(medianGap > 0)) continue;
+    const consistentGap = gaps.every((g) => Math.abs(g - medianGap) / medianGap <= 0.35);
+    if (!consistentGap) continue;
+
+    let frequency: Frequency;
+    if (medianGap <= 10) frequency = 'weekly';
+    else if (medianGap <= 20) frequency = 'fortnightly';
+    else if (medianGap <= 45) frequency = 'monthly';
+    else if (medianGap <= 400) frequency = 'annually';
+    else continue;
+
+    const mostRecent = sorted[sorted.length - 1];
+    candidates.push({ key, name: mostRecent.name, type: mostRecent.type, category: mostRecent.category, amount: medianAmount, frequency });
+  }
+  return candidates;
+}
+
 export const EXPENSE_CATEGORIES = [
   'Housing',
   'Groceries',

@@ -204,8 +204,20 @@ function CsvImportBody({ onDone }: { onDone: () => void }) {
   }
 
   async function runAiCategorize(parsedRows: ParsedRow[]) {
+    // Only ever ask the model about a row the keyword rules genuinely
+    // couldn't place ("Other") — a row the rules already matched confidently
+    // (Amazon -> Shopping, CMC Markets -> Savings, etc) has nothing to gain
+    // from a model call and everything to lose if the model's fuzzier guess
+    // overwrote it. This is also just the sane cost story: on a real import
+    // the rules resolve the vast majority of rows, so this cuts what used to
+    // be one call per transaction down to a handful of true unknowns.
+    const uncertain = parsedRows.map((r, i) => ({ row: r, i })).filter(({ row }) => row.category === 'Other');
+    if (uncertain.length === 0) {
+      setAiStatus('done');
+      return;
+    }
     setAiStatus('checking');
-    const items = parsedRows.map((r, i) => ({ id: String(i), description: r.description, type: r.type, amount: r.amount }));
+    const items = uncertain.map(({ row, i }) => ({ id: String(i), description: row.description, type: row.type, amount: row.amount }));
     const outcome = await categorizeWithAI(items);
     if (!outcome.ok) {
       // Every batch failed — say so honestly instead of showing "double

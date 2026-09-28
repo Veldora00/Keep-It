@@ -5,6 +5,7 @@ import { colors, fonts, radii } from '../theme/theme';
 import { Card, EmptyState, PageTitle } from '../components/ui';
 import { useStore } from '../lib/store';
 import { FREQUENCY_LABELS, monthlyEquivalent, money } from '../lib/calculations';
+import { detectRecurringCandidates } from '../lib/types';
 
 const RANGES = [3, 6, 12];
 
@@ -108,20 +109,35 @@ export default function ForecastScreen() {
   const [expanded, setExpanded] = useState<'balance' | 'savings' | null>(null);
 
   const recurring = useMemo(() => transactions.filter((t) => t.recurring), [transactions]);
+  // A CSV import never sets `recurring: true` on a row by itself — that flag
+  // is only ever set by hand (the add/edit sheet, or a Home habit toggle).
+  // So a real salary, subscription, or investment transfer that came in
+  // through an import used to be invisible here even though it repeats
+  // every payslip. detectRecurringCandidates finds that repetition directly
+  // from the transaction history; skip any name/type it already found
+  // manually flagged so the same income/expense isn't counted twice.
+  const manualKeys = useMemo(() => new Set(recurring.map((t) => `${t.type}|${t.name.trim().toLowerCase()}`)), [recurring]);
+  const detected = useMemo(
+    () => detectRecurringCandidates(transactions).filter((c) => !manualKeys.has(c.key)),
+    [transactions, manualKeys]
+  );
   const currentBalance = useMemo(
     () =>
       transactions.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0) -
       transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0),
     [transactions]
   );
-  const monthlyNet = useMemo(
-    () =>
-      recurring.reduce((s, t) => {
-        const eq = monthlyEquivalent(t.amount, t.frequency);
-        return s + (t.type === 'income' ? eq : -eq);
-      }, 0),
-    [recurring]
-  );
+  const monthlyNet = useMemo(() => {
+    const fromManual = recurring.reduce((s, t) => {
+      const eq = monthlyEquivalent(t.amount, t.frequency);
+      return s + (t.type === 'income' ? eq : -eq);
+    }, 0);
+    const fromDetected = detected.reduce((s, c) => {
+      const eq = monthlyEquivalent(c.amount, c.frequency);
+      return s + (c.type === 'income' ? eq : -eq);
+    }, 0);
+    return fromManual + fromDetected;
+  }, [recurring, detected]);
 
   const points = useMemo(() => {
     const pts: number[] = [];
@@ -172,7 +188,7 @@ export default function ForecastScreen() {
   );
 
   const note =
-    recurring.length === 0
+    recurring.length === 0 && detected.length === 0
       ? 'Mark some transactions as recurring to see a projection here.'
       : `At this pace, your balance moves by ${money(monthlyNet)} per month, reaching ${money(points[points.length - 1])} in ${months} months.`;
 
@@ -264,12 +280,12 @@ export default function ForecastScreen() {
       </Modal>
 
       <Text style={styles.sectionLabel}>Recurring items counted</Text>
-      {recurring.length === 0 ? (
+      {recurring.length === 0 && detected.length === 0 ? (
         <EmptyState text="Mark a transaction as recurring to see it here" />
       ) : (
         <View>
           {recurring.map((t) => (
-            <View key={t.id} style={styles.txItem}>
+            <View key={`m-${t.id}`} style={styles.txItem}>
               <View style={[styles.txIcon, { backgroundColor: t.type === 'income' ? colors.accentSoft : colors.redSoft }]}>
                 <Text>{t.type === 'income' ? '↓' : '↑'}</Text>
               </View>
@@ -282,6 +298,23 @@ export default function ForecastScreen() {
               <Text style={[styles.txAmt, { color: t.type === 'income' ? colors.accentDeep : colors.red }]}>
                 {t.type === 'income' ? '+' : '-'}
                 {money(t.amount)}
+              </Text>
+            </View>
+          ))}
+          {detected.map((c) => (
+            <View key={`d-${c.key}`} style={styles.txItem}>
+              <View style={[styles.txIcon, { backgroundColor: c.type === 'income' ? colors.accentSoft : colors.redSoft }]}>
+                <Text>{c.type === 'income' ? '↓' : '↑'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.txName}>{c.name}</Text>
+                <Text style={styles.txMeta}>
+                  {c.category} · {FREQUENCY_LABELS[c.frequency]} · detected from history
+                </Text>
+              </View>
+              <Text style={[styles.txAmt, { color: c.type === 'income' ? colors.accentDeep : colors.red }]}>
+                {c.type === 'income' ? '+' : '-'}
+                {money(c.amount)}
               </Text>
             </View>
           ))}

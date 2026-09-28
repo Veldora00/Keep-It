@@ -220,10 +220,21 @@ function parseAmount(raw: string): number | null {
 // they'd otherwise dominate the "Other" bucket (and, worse, show up as
 // fake "everyday habit" candidates on Home — see expenseHabitCandidates).
 const TRANSFER_PATTERN = /\btransfer (to|from)\b|\bpayid\b|\bmember net transfer\b/i;
+// Money going to/from a stockbroker, trading platform or super fund is
+// investing, not a random transfer or "Other" — checked BEFORE
+// TRANSFER_PATTERN because these lines are very often *also* worded as an
+// "Osko Payment To ... - CMC Markets" or "Transfer ... Webull" line, which
+// would otherwise get swallowed as a generic Transfer and lose the
+// investing signal entirely.
+const SAVINGS_PATTERN =
+  /cmc markets|webull|selfwealth|commsec|superhero|stake\b|interactive brokers|ibkr|pearler|raiz|spaceship|australiansuper|\bamp\b.*super|netbank my investment|payto webull|\boanda\b|auto smart savings/i;
 // Bank/card fees are a distinct thing from a subscription (a fee isn't a
 // service you chose to sign up for) — giving them their own category keeps
-// them out of "Other" without stretching what "Subscriptions" means.
-const FEE_PATTERN = /\b(card|account|monthly|service|dishonour|late)\s+fee\b|\bfee\b.*\bcard\b|dishonour|overdrawn/i;
+// them out of "Other" without stretching what "Subscriptions" means. Broadened
+// to a bare "fee" (not just "X fee" for a fixed list of X's) so wordings like
+// "Unpaid Payment Fee" still match — checked to still require the word "fee"
+// itself, so it can't false-positive on unrelated text.
+const FEE_PATTERN = /\bfee\b|dishonour|overdrawn/i;
 
 const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
   { category: 'Groceries', pattern: /woolworths|coles|aldi|\biga\b|foodworks|harris farm|fresh city|farmers market|greengrocer/i },
@@ -250,24 +261,32 @@ const CATEGORY_KEYWORDS: { category: string; pattern: RegExp }[] = [
     // Subscriptions signal — on a personal statement a Google charge is
     // almost always Play Store/One/Workspace, not a business expense.
     pattern:
-      /netflix|spotify|disney|stan\b|amazon prime|youtube premium|apple\.com\/bill|kayo|\btelegram\b|\bgoogle\b|discord|icloud|chatgpt|openai/i,
+      /netflix|spotify|disney|stan\b|amazon prime|youtube premium|apple\.com\/bill|kayo|\btelegram\b|\bgoogle\b|discord|icloud|chatgpt|openai|microsoft\*store|msbill\.info/i,
   },
-  { category: 'Utilities', pattern: /energy|electricity|agl|origin|telstra|optus|vodafone|water corp|gas\b/i },
+  { category: 'Utilities', pattern: /energy|electricity|agl|origin|telstra|optus|vodafone|water corp|gas\b|superloop|broadband/i },
   { category: 'Housing', pattern: /rent|mortgage|strata|real estate/i },
   { category: 'Entertainment', pattern: /cinema|event cinemas|ticketek|ticketmaster|hoyts/i },
   {
     category: 'Shopping',
+    // Afterpay is a buy-now-pay-later installment provider, not a merchant
+    // itself — the line is a repayment for an earlier purchase, so it's real
+    // spending (Shopping), not a transfer or a fee.
     pattern:
-      /amazon(?!\s*prime)|ebay|kmart|target|big\s*w|jb\s*hi-?fi|officeworks|bunnings|new balance|ray-?ban|allbids|\bnike\b|\badidas\b|cotton on|\bmyer\b|david jones/i,
+      /amazon(?!\s*prime)|ebay|kmart|target|big\s*w|jb\s*hi-?fi|officeworks|bunnings|new balance|ray-?ban|allbids|\bnike\b|\badidas\b|cotton on|\bmyer\b|david jones|afterpay/i,
   },
 ];
 function guessExpenseCategory(description: string): string {
+  if (SAVINGS_PATTERN.test(description)) return 'Savings';
   if (TRANSFER_PATTERN.test(description)) return 'Transfers';
   if (FEE_PATTERN.test(description)) return 'Fees & Charges';
   const found = CATEGORY_KEYWORDS.find((k) => k.pattern.test(description));
   return found ? found.category : 'Other';
 }
 function guessIncomeCategory(description: string): string {
+  // A deposit FROM a broker (selling shares, a Webull payout) is money
+  // coming back out of investing — still Investment/Interest, not a plain
+  // Transfer or Other, so check this before the generic Transfer pattern too.
+  if (SAVINGS_PATTERN.test(description)) return 'Investment/Interest';
   if (TRANSFER_PATTERN.test(description)) return 'Transfers';
   if (/salary|payroll|wages|employer/i.test(description)) return 'Salary/Wages';
   if (/interest/i.test(description)) return 'Investment/Interest';
