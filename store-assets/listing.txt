@@ -1,0 +1,15 @@
+SHORT DESCRIPTION (max 80 chars):
+Track spending, spot habits, and see where your money actually goes.
+
+FULL DESCRIPTION (max 4000 chars):
+Keep It is a straightforward personal budgeting app for tracking what you spend and what you earn — without spreadsheets.
+
+• Import your bank or credit card statement as a CSV and Keep It sorts your transactions into categories automatically, so you're not typing every purchase in by hand.
+• See your balance, this month's income and spending, and a breakdown by category at a glance.
+• Track everyday habits (coffee, takeout, subscriptions) and see exactly what they're costing you over time.
+• Forecast where your balance is headed based on your recurring income and bills — no manual setup required, Keep It finds the patterns in your own history.
+• Refunds and cancelled purchases are automatically netted out, so your spending totals reflect what you actually kept, not the raw transaction list.
+
+Keep It doesn't show ads, doesn't sell your data, and doesn't track you across other apps. It's built to answer one question honestly: where is your money actually going?
+
+CATEGORY: Finance
